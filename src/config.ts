@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs"
 import { dirname, isAbsolute, join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
+import { DEFAULT_GLOBAL_DEPS } from "./affected.js"
 
 export type ScreenshotBrowser = "chromium" | "firefox" | "webkit"
 
@@ -72,6 +73,19 @@ export interface StorybookScreenshotsConfig {
    * this with the CLI `--shard` flag to also split work across CI runners.
    */
   workers?: number | string
+  /**
+   * Storybook module-graph stats used by incremental mode (`--changed` /
+   * `affected`). Build Storybook with `--stats-json` to produce it. Default:
+   * `<storybookDir>/preview-stats.json`.
+   */
+  statsFile?: string
+  /**
+   * Globs (relative to the repo root) that force capturing every story when a
+   * matching file changes — inputs that affect rendering globally or that the
+   * module graph can't trace (config, `.storybook/**`, lockfiles, tailwind…).
+   * Default: a conservative built-in list (see `DEFAULT_GLOBAL_DEPS`).
+   */
+  globalDeps?: string[]
   /** Port for the built-in static server. Default: `6007`. */
   port?: number
 }
@@ -97,6 +111,8 @@ export interface ResolvedConfig {
   failFast: boolean
   retries: number
   workers: number | string | null
+  statsFile: string
+  globalDeps: string[]
   port: number
 }
 
@@ -143,9 +159,10 @@ export function resolveConfig(
   rootDir: string
 ): ResolvedConfig {
   const toAbs = (p: string) => (isAbsolute(p) ? p : resolve(rootDir, p))
+  const storybookDir = toAbs(config.storybookDir ?? "storybook-static")
   return {
     buildCommand: config.buildCommand ?? null,
-    storybookDir: toAbs(config.storybookDir ?? "storybook-static"),
+    storybookDir,
     snapshotDir: toAbs(config.snapshotDir ?? "__screenshots__"),
     browsers: config.browsers ?? ["chromium"],
     viewports: config.viewports ?? [
@@ -158,6 +175,8 @@ export function resolveConfig(
     failFast: config.failFast ?? true,
     retries: config.retries ?? 2,
     workers: config.workers ?? null,
+    statsFile: toAbs(config.statsFile ?? join(storybookDir, "preview-stats.json")),
+    globalDeps: config.globalDeps ?? DEFAULT_GLOBAL_DEPS,
     port: config.port ?? 6007,
   }
 }

@@ -20,10 +20,12 @@ const index = JSON.parse(
   readFileSync(join(options.storybookDir, "index.json"), "utf8")
 ) as StorybookIndex
 
+const only = options.only ? new Set(options.only) : null
 const stories = Object.values(index.entries).filter(
   (entry) =>
     entry.type === "story" &&
-    !entry.tags?.some((tag) => options.skipTags.includes(tag))
+    !entry.tags?.some((tag) => options.skipTags.includes(tag)) &&
+    (only ? only.has(entry.id) : true)
 )
 
 function globalsParam(theme: ScreenshotTheme | null): string {

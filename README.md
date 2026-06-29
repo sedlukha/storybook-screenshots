@@ -68,6 +68,9 @@ storybook-screenshots --update        # write/refresh baselines
 storybook-screenshots --config ./path/to/config.mjs
 storybook-screenshots --shard 2/4     # capture only the 2nd of 4 slices
 storybook-screenshots --no-build      # skip buildCommand, use an existing build
+storybook-screenshots --changed origin/master   # capture only affected stories
+storybook-screenshots affected --base origin/master --out affected.json
+storybook-screenshots --update --only affected.json
 ```
 
 The CLI looks for the nearest `storybook-screenshots.config.mjs` (or `.js`),
@@ -79,6 +82,11 @@ walking up from the current directory.
 | `--config`, `-c` | Path to the config file (otherwise the nearest one is used).                |
 | `--shard <i/N>`  | Capture only slice `i` of `N` — split a run across CI runners.              |
 | `--no-build`     | Skip `buildCommand` and screenshot the existing `storybookDir`.             |
+| `--changed <ref>`| Incremental: capture only stories affected since git `<ref>`.               |
+| `--only <v>`     | Restrict to an allowlist — an `affected` JSON file or a comma list of IDs.  |
+
+Plus an `affected` subcommand that computes the changed-story allowlist without
+capturing: `storybook-screenshots affected --base <ref> [--out file.json]`.
 
 ## Config
 
@@ -96,6 +104,8 @@ walking up from the current directory.
 | `failFast`          | `boolean`                              | `true`                                       | Stop the whole run on the first failing story.                           |
 | `retries`           | `number`                               | `2`                                          | Retry count (applied on CI).                                             |
 | `workers`           | `number \| string`                     | Playwright default (½ cores)                 | Parallel workers; a count or a percentage string like `"100%"`.          |
+| `statsFile`         | `string`                               | `<storybookDir>/preview-stats.json`          | Module-graph stats for incremental mode (build with `--stats-json`).      |
+| `globalDeps`        | `string[]`                             | `DEFAULT_GLOBAL_DEPS`                         | Globs that force a full run when changed (config, `.storybook/**`, locks…). |
 | `port`              | `number`                               | `6007`                                       | Port for the built-in static server.                                     |
 
 Baselines are written to `<snapshotDir>/<browser>-<viewport>[-<theme>]/<story-id>.png`.
@@ -208,6 +218,47 @@ jobs:
           token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
           snapshot-glob: "screenshots/__screenshots__/**"
 ```
+
+### Incremental capture (changed stories only)
+
+Even sharded, capturing every story on every PR is wasteful when a change touches
+one component. Incremental mode captures only the stories a change set can
+affect; the committed baselines are the cache for the rest.
+
+It works like Chromatic's TurboSnap. Build Storybook with `--stats-json` to emit
+a module-dependency graph (`storybook-static/preview-stats.json`), then:
+
+1. `git diff --name-only <base>...HEAD` lists changed files.
+2. If any match `globalDeps` (config, `.storybook/**`, lockfiles, `package.json`,
+   tailwind/postcss) → **every** story runs. These affect rendering globally or
+   can't be traced, so it errs on the safe side.
+3. Otherwise the graph is reverse-traced: a changed file → every story that
+   transitively imports it. Change a `Button` and every story that renders a
+   Button is re-captured; nothing else is.
+
+```sh
+storybook build --stats-json
+# one process: build is already done, so add --no-build
+storybook-screenshots --update --no-build --changed origin/master
+```
+
+In a sharded pipeline, compute the allowlist once and pass it to every shard:
+
+```yaml
+# in the build job, after `storybook build --stats-json`:
+- run: |
+    git fetch --no-tags origin "${{ github.base_ref }}"
+    npx storybook-screenshots affected --base "origin/${{ github.base_ref }}" --out affected.json
+- uses: actions/upload-artifact@v4
+  with: { name: affected, path: affected.json }
+
+# in each shard, after downloading storybook-static + affected:
+- run: npx storybook-screenshots --update --no-build --shard ${{ matrix.shard }}/4 --only affected.json
+```
+
+An `affected.json` of `{ "all": true }` (a global change, or any uncertainty —
+missing stats, git failure, no base) means `--only` runs everything. When no
+story is affected, the run captures nothing and exits cleanly.
 
 ## How it works
 

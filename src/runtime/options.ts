@@ -18,6 +18,8 @@ export interface RuntimeOptions {
   failFast: boolean
   retries: number
   workers: number | string | null
+  /** Restrict the run to these story IDs (incremental mode). `null` = all. */
+  only: string[] | null
 }
 
 export const RUNTIME_ENV_KEY = "STORYBOOK_SCREENSHOTS_OPTIONS"
