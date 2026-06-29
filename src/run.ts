@@ -11,6 +11,10 @@ export interface RunOptions {
   update?: boolean
   /** Explicit config path. Defaults to the nearest storybook-screenshots.config file. */
   configPath?: string
+  /** Playwright shard, e.g. `"2/4"` — capture only this slice of the stories. */
+  shard?: string
+  /** Skip `buildCommand` and screenshot an already-built `storybookDir`. */
+  skipBuild?: boolean
 }
 
 export async function run(opts: RunOptions = {}): Promise<number> {
@@ -27,7 +31,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
   const rootDir = dirname(configPath)
   const config = resolveConfig(await loadConfig(configPath), rootDir)
 
-  if (config.buildCommand) {
+  if (config.buildCommand && !opts.skipBuild) {
     console.log(`▶ ${config.buildCommand}`)
     execSync(config.buildCommand, { cwd: rootDir, stdio: "inherit" })
   }
@@ -52,8 +56,9 @@ export async function run(opts: RunOptions = {}): Promise<number> {
       maxDiffPixelRatio: config.maxDiffPixelRatio,
       failFast: config.failFast,
       retries: config.retries,
+      workers: config.workers,
     }
-    return await runPlaywright(rootDir, !!opts.update, runtimeOptions)
+    return await runPlaywright(rootDir, !!opts.update, runtimeOptions, opts.shard)
   } finally {
     await server.close()
   }
@@ -74,11 +79,15 @@ function bundledConfigPath(): string {
 function runPlaywright(
   rootDir: string,
   update: boolean,
-  runtimeOptions: RuntimeOptions
+  runtimeOptions: RuntimeOptions,
+  shard?: string
 ): Promise<number> {
   const args = ["test", "--config", bundledConfigPath()]
   if (update) {
     args.push("--update-snapshots=all")
+  }
+  if (shard) {
+    args.push(`--shard=${shard}`)
   }
 
   // Prefer the consumer's locally installed Playwright; fall back to npx.

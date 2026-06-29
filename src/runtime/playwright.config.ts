@@ -58,6 +58,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   maxFailures: options.failFast ? 1 : undefined,
   retries: process.env.CI ? options.retries : 0,
+  ...(options.workers != null ? { workers: options.workers } : {}),
   reporter: process.env.CI ? "github" : "list",
   expect: {
     toHaveScreenshot: {

@@ -63,13 +63,22 @@ a Playwright diff.
 ## CLI
 
 ```sh
-storybook-screenshots            # build + serve + compare
-storybook-screenshots --update   # write/refresh baselines
+storybook-screenshots                 # build + serve + compare
+storybook-screenshots --update        # write/refresh baselines
 storybook-screenshots --config ./path/to/config.mjs
+storybook-screenshots --shard 2/4     # capture only the 2nd of 4 slices
+storybook-screenshots --no-build      # skip buildCommand, use an existing build
 ```
 
 The CLI looks for the nearest `storybook-screenshots.config.mjs` (or `.js`),
 walking up from the current directory.
+
+| Flag             | Description                                                                 |
+| ---------------- | --------------------------------------------------------------------------- |
+| `--update`, `-u` | Write/overwrite baselines instead of comparing.                             |
+| `--config`, `-c` | Path to the config file (otherwise the nearest one is used).                |
+| `--shard <i/N>`  | Capture only slice `i` of `N` — split a run across CI runners.              |
+| `--no-build`     | Skip `buildCommand` and screenshot the existing `storybookDir`.             |
 
 ## Config
 
@@ -86,6 +95,7 @@ walking up from the current directory.
 | `maxDiffPixelRatio` | `number`                               | `0.01`                                       | Allowed differing-pixel ratio before a story fails.                      |
 | `failFast`          | `boolean`                              | `true`                                       | Stop the whole run on the first failing story.                           |
 | `retries`           | `number`                               | `2`                                          | Retry count (applied on CI).                                             |
+| `workers`           | `number \| string`                     | Playwright default (½ cores)                 | Parallel workers; a count or a percentage string like `"100%"`.          |
 | `port`              | `number`                               | `6007`                                       | Port for the built-in static server.                                     |
 
 Baselines are written to `<snapshotDir>/<browser>-<viewport>[-<theme>]/<story-id>.png`.
@@ -139,6 +149,64 @@ pull request automatically, pair this with
   with:
     token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
     snapshot-glob: "screenshots/__screenshots__/**"
+```
+
+### Sharding across runners
+
+A big matrix (browsers × viewports × themes × stories) is slow on one runner.
+Capture is render-bound, so the fix is parallelism, not caching. Two levers:
+
+- **`workers`** — use every core on a single runner (`workers: "100%"`).
+- **`--shard i/N`** — split the run across N runners, then merge the slices.
+
+A sharded pipeline: build Storybook once and share it as an artifact, fan out
+the capture across N runners, then combine the slices into one auto-fix PR.
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm run build-storybook
+      - uses: actions/upload-artifact@v4
+        with: { name: storybook-static, path: storybook-static }
+
+  screenshots:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2, 3, 4] }
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with: { name: storybook-static, path: storybook-static }
+      # --no-build reuses the shared build; --shard captures this slice only.
+      - run: npx storybook-screenshots --update --no-build --shard ${{ matrix.shard }}/4
+      # Upload only the baselines this shard touched (slices are disjoint).
+      - run: |
+          git add -A screenshots/__screenshots__
+          git diff --cached --name-only | tar -czf shard.tgz -T -
+      - uses: actions/upload-artifact@v4
+        with: { name: shots-${{ matrix.shard }}, path: shard.tgz }
+
+  pr:
+    needs: screenshots
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/download-artifact@v4
+        with: { pattern: shots-*, path: shards }
+      - run: for f in shards/*/shard.tgz; do tar -xzf "$f"; done
+      - uses: sedlukha/snapshot-autofix-pr@v1
+        with:
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          snapshot-glob: "screenshots/__screenshots__/**"
 ```
 
 ## How it works

@@ -66,6 +66,12 @@ export interface StorybookScreenshotsConfig {
   failFast?: boolean
   /** Retry count (applied on CI). Default: `2`. */
   retries?: number
+  /**
+   * Parallel worker processes. A number, or a Playwright percentage string like
+   * `"100%"` (use all cores). Default: Playwright's own (half the cores). Pair
+   * this with the CLI `--shard` flag to also split work across CI runners.
+   */
+  workers?: number | string
   /** Port for the built-in static server. Default: `6007`. */
   port?: number
 }
@@ -90,6 +96,7 @@ export interface ResolvedConfig {
   maxDiffPixelRatio: number
   failFast: boolean
   retries: number
+  workers: number | string | null
   port: number
 }
 
@@ -150,6 +157,7 @@ export function resolveConfig(
     maxDiffPixelRatio: config.maxDiffPixelRatio ?? 0.01,
     failFast: config.failFast ?? true,
     retries: config.retries ?? 2,
+    workers: config.workers ?? null,
     port: config.port ?? 6007,
   }
 }

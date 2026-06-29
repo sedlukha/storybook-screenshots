@@ -17,6 +17,7 @@ export interface RuntimeOptions {
   maxDiffPixelRatio: number
   failFast: boolean
   retries: number
+  workers: number | string | null
 }
 
 export const RUNTIME_ENV_KEY = "STORYBOOK_SCREENSHOTS_OPTIONS"
