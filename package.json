@@ -1,0 +1,63 @@
+{
+  "name": "storybook-screenshots",
+  "version": "0.1.0",
+  "description": "Screenshot every Storybook story with Playwright. A config file in your repo, a CLI that builds, serves, and captures — themes, viewports, and browsers included.",
+  "keywords": [
+    "storybook",
+    "playwright",
+    "screenshot",
+    "screenshots",
+    "visual-regression",
+    "visual-testing",
+    "snapshot",
+    "testing",
+    "ci"
+  ],
+  "license": "MIT",
+  "author": "Arthur Sedlukha",
+  "homepage": "https://github.com/sedlukha/storybook-screenshots#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sedlukha/storybook-screenshots.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sedlukha/storybook-screenshots/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "storybook-screenshots": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "rimraf dist && tsc -p tsconfig.build.json && node scripts/post-build.js",
+    "dev": "tsx src/cli/index.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.0.0",
+    "rimraf": "^6.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  },
+  "packageManager": "pnpm@10.27.0"
+}

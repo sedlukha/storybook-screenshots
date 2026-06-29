@@ -1,0 +1,8 @@
+src
+examples
+scripts
+tsconfig.json
+tsconfig.build.json
+.gitignore
+.github
+*.tgz
