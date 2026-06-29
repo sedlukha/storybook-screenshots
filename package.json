@@ -47,6 +47,7 @@
     "build": "rimraf dist && tsc -p tsconfig.build.json && node scripts/post-build.js",
     "dev": "tsx src/cli/index.ts",
     "typecheck": "tsc --noEmit",
+    "prepare": "pnpm run build",
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
