@@ -1,6 +1,6 @@
 {
   "name": "storybook-screenshots",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Screenshot every Storybook story with Playwright. A config file in your repo, a CLI that builds, serves, and captures — themes, viewports, and browsers included.",
   "keywords": [
     "storybook",
@@ -47,7 +47,6 @@
     "build": "rimraf dist && tsc -p tsconfig.build.json && node scripts/post-build.js",
     "dev": "tsx src/cli/index.ts",
     "typecheck": "tsc --noEmit",
-    "prepare": "pnpm run build",
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
