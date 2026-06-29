@@ -79,7 +79,7 @@ walking up from the current directory.
 | `storybookDir`      | `string`                               | `"storybook-static"`                         | Built Storybook directory (must contain `index.json`).                   |
 | `snapshotDir`       | `string`                               | `"__screenshots__"`                          | Where baseline PNGs are written/compared.                                |
 | `browsers`          | `("chromium"\|"firefox"\|"webkit")[]`  | `["chromium"]`                               | Browsers to capture.                                                     |
-| `viewports`         | `{ name, width, height }[]`            | `[{ name: "desktop", width: 1280, height: 800 }]` | Viewports to capture.                                              |
+| `viewports`         | `ScreenshotViewport[]`                 | `[{ name: "desktop", width: 1280, height: 800 }]` | Viewports/devices to capture (see [Device types](#device-types)). |
 | `themes`            | `{ name, globals }[]`                  | `[]`                                         | Themes applied via Storybook globals (`?globals=theme:dark`).            |
 | `skipTags`          | `string[]`                             | `["!screenshot"]`                            | Skip stories carrying any of these Storybook tags.                       |
 | `fullPage`          | `boolean`                              | `true`                                       | Capture the full scrollable page.                                        |
@@ -89,6 +89,33 @@ walking up from the current directory.
 | `port`              | `number`                               | `6007`                                       | Port for the built-in static server.                                     |
 
 Baselines are written to `<snapshotDir>/<browser>-<viewport>[-<theme>]/<story-id>.png`.
+
+## Device types
+
+A viewport is more than a width and height — `ScreenshotViewport` carries
+optional device-emulation fields so one matrix can cover desktop, tablet, and
+mobile form factors:
+
+| Field               | Type      | Default          | Description                                                              |
+| ------------------- | --------- | ---------------- | ------------------------------------------------------------------------ |
+| `name`              | `string`  | —                | Snapshot path segment (part of the project name).                        |
+| `width` / `height`  | `number`  | —                | Layout size in CSS pixels.                                               |
+| `deviceScaleFactor` | `number`  | `1`              | Device pixel ratio. Raise to render at retina density (`srcset`, DPR styles). |
+| `isMobile`          | `boolean` | `false`          | Mobile meta viewport + touch. **Chromium only.**                         |
+| `hasTouch`          | `boolean` | follows `isMobile` | Touch events; set independently of `isMobile`.                         |
+
+```js
+viewports: [
+  { name: "desktop", width: 1280, height: 800 },
+  { name: "tablet", width: 768, height: 1024, deviceScaleFactor: 2 },
+  { name: "mobile", width: 390, height: 844, deviceScaleFactor: 3, isMobile: true },
+]
+```
+
+Each viewport becomes its own Playwright project and baseline folder, multiplied
+by every browser and theme. With `scale: "css"` the captured PNG stays at 1 px
+per CSS pixel, so a higher `deviceScaleFactor` changes what the page *renders*
+(media queries, image sources) while keeping baselines OS-independent.
 
 ## Themes
 

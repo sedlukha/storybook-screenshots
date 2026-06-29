@@ -31,6 +31,17 @@ const projects = options.browsers.flatMap((browser) =>
         use: {
           ...device,
           viewport: { width: viewport.width, height: viewport.height },
+          // Per-viewport device emulation. Only spread keys the config set, so
+          // the browser device profile's defaults stay intact otherwise.
+          ...(viewport.deviceScaleFactor !== undefined
+            ? { deviceScaleFactor: viewport.deviceScaleFactor }
+            : {}),
+          ...(viewport.isMobile !== undefined
+            ? { isMobile: viewport.isMobile }
+            : {}),
+          ...(viewport.hasTouch !== undefined
+            ? { hasTouch: viewport.hasTouch }
+            : {}),
         },
         metadata: { theme },
       }

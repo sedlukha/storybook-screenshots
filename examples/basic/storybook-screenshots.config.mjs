@@ -8,7 +8,20 @@ export default {
   snapshotDir: "screenshots/__screenshots__",
 
   browsers: ["chromium"],
-  viewports: [{ name: "desktop", width: 1280, height: 800 }],
+
+  // Each viewport is its own baseline folder. Add device-emulation fields
+  // (deviceScaleFactor, isMobile, hasTouch) to cover real device types.
+  viewports: [
+    { name: "desktop", width: 1280, height: 800 },
+    { name: "tablet", width: 768, height: 1024, deviceScaleFactor: 2 },
+    {
+      name: "mobile",
+      width: 390,
+      height: 844,
+      deviceScaleFactor: 3,
+      isMobile: true,
+    },
+  ],
 
   // Each theme is applied via Storybook globals (?globals=theme:dark).
   themes: [

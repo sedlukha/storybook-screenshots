@@ -5,9 +5,29 @@ import { pathToFileURL } from "node:url"
 export type ScreenshotBrowser = "chromium" | "firefox" | "webkit"
 
 export interface ScreenshotViewport {
+  /** Label used as a snapshot path segment (part of the project name). */
   name: string
+  /** Layout width in CSS pixels. */
   width: number
+  /** Layout height in CSS pixels. */
   height: number
+  /**
+   * Device pixel ratio. Default: `1`. Raise it (e.g. `2` or `3`) to render at a
+   * high-density "retina" scale, exercising `srcset`/DPR-conditional styles.
+   * Note: with `scale: "css"` the captured PNG stays at 1 px per CSS pixel, so
+   * baselines remain OS-independent — this only changes what the page renders.
+   */
+  deviceScaleFactor?: number
+  /**
+   * Emulate a mobile device: applies the mobile meta viewport and enables touch.
+   * Default: `false`. Chromium only — Playwright rejects it for firefox/webkit.
+   */
+  isMobile?: boolean
+  /**
+   * Emulate touch events. Default: follows `isMobile`. Set explicitly to add
+   * touch to a desktop viewport, or to strip it from a mobile one.
+   */
+  hasTouch?: boolean
 }
 
 export interface ScreenshotTheme {
