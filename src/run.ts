@@ -8,7 +8,7 @@ import { RUNTIME_ENV_KEY, type RuntimeOptions } from "./runtime/options.js"
 import { startStaticServer } from "./runtime/serve.js"
 
 export interface RunOptions {
-  /** Write/overwrite baselines instead of comparing (Playwright --update-snapshots=all). */
+  /** Write changed/missing baselines instead of failing (Playwright --update-snapshots=changed). */
   update?: boolean
   /** Explicit config path. Defaults to the nearest storybook-screenshots.config file. */
   configPath?: string
@@ -149,7 +149,11 @@ function runPlaywright(
 ): Promise<number> {
   const args = ["test", "--config", bundledConfigPath()]
   if (update) {
-    args.push("--update-snapshots=all")
+    // `changed`, not `all`: `all` compares baselines byte-for-byte and rewrites
+    // on any difference, so non-visual PNG-encoding drift churns baselines every
+    // run. `changed` compares pixels (within maxDiffPixelRatio) and only rewrites
+    // real changes — while still creating missing baselines and passing on write.
+    args.push("--update-snapshots=changed")
   }
   if (shard) {
     args.push(`--shard=${shard}`)

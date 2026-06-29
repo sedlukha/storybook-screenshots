@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-06-29
+
+### Fixed
+
+- Baselines no longer churn on non-visual changes. `--update` now runs Playwright
+  with `--update-snapshots=changed` instead of `all`: `all` compares baselines
+  byte-for-byte and rewrites on any difference, so PNG-encoding drift (a couple of
+  bytes with identical pixels) produced a fresh diff every run. `changed` compares
+  pixels within `maxDiffPixelRatio` and only rewrites real changes, while still
+  creating missing baselines and passing (exit 0) when it writes.
+
 ## [0.4.0] - 2026-06-29
 
 ### Added
@@ -64,6 +75,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Per-story tests across a browser × viewport × theme matrix, themes applied via
   Storybook globals.
 
+[0.4.1]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.4.1
 [0.4.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.4.0
 [0.3.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.3.0
 [0.2.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.2.0
