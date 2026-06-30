@@ -128,32 +128,62 @@ async function waitForPlayFinished(page: Page) {
     })
 }
 
-// Per-story pause before capturing, for stories that settle asynchronously
-// (a play function opening a dialog, a delayed reveal…). Reads Storybook
-// parameters at runtime: `screenshot.delay` (this tool) or `chromatic.delay`
-// (Chromatic-compatible), in milliseconds. Returns 0 when unset/unavailable.
-async function readDelayMs(page: Page, storyId: string): Promise<number> {
-  const delay = await page
+interface StoryScreenshotParams {
+  /** Pause before capturing (ms). */
+  delay: number
+  /** CSS selectors to mask (hide) before capturing — for dynamic content. */
+  mask: string[]
+  /** Per-story override of `fullPage`. */
+  fullPage?: boolean
+  /** Per-story override of `maxDiffPixelRatio`. */
+  maxDiffPixelRatio?: number
+  /** Restrict this story to these viewport names. */
+  viewports?: string[]
+}
+
+const DEFAULT_PARAMS: StoryScreenshotParams = { delay: 0, mask: [] }
+
+// Read per-story capture options from Storybook `parameters.screenshot` (with
+// `chromatic.delay` honored for the delay), at runtime via the preview API.
+async function readScreenshotParams(
+  page: Page,
+  storyId: string
+): Promise<StoryScreenshotParams> {
+  return await page
     .evaluate(async (id) => {
       const preview = (
         window as unknown as {
           __STORYBOOK_PREVIEW__?: {
             loadStory?: (opts: { storyId: string }) => Promise<{
               parameters?: {
-                screenshot?: { delay?: number }
+                screenshot?: {
+                  delay?: number
+                  mask?: string[]
+                  fullPage?: boolean
+                  maxDiffPixelRatio?: number
+                  viewports?: string[]
+                }
                 chromatic?: { delay?: number }
               }
             }>
           }
         }
       ).__STORYBOOK_PREVIEW__
-      const story = await preview?.loadStory?.({ storyId: id })
-      const params = story?.parameters
-      const value = params?.screenshot?.delay ?? params?.chromatic?.delay
-      return typeof value === "number" ? value : 0
+      const params = (await preview?.loadStory?.({ storyId: id }))?.parameters
+      const shot = params?.screenshot ?? {}
+      const delay = shot.delay ?? params?.chromatic?.delay
+      return {
+        delay: typeof delay === "number" ? delay : 0,
+        mask: Array.isArray(shot.mask) ? shot.mask : [],
+        fullPage: typeof shot.fullPage === "boolean" ? shot.fullPage : undefined,
+        maxDiffPixelRatio:
+          typeof shot.maxDiffPixelRatio === "number"
+            ? shot.maxDiffPixelRatio
+            : undefined,
+        viewports: Array.isArray(shot.viewports) ? shot.viewports : undefined,
+      } satisfies StoryScreenshotParams
     }, storyId)
-    .catch(() => 0)
-  return delay > 0 ? delay : 0
+    .catch(() => DEFAULT_PARAMS)
 }
 
 test.describe("storybook stories", () => {
@@ -163,6 +193,7 @@ test.describe("storybook stories", () => {
         theme?: ScreenshotTheme
         snapshotFolder: string
         snapshotSuffix: string
+        viewportName: string
       }
       const theme = meta.theme ?? null
       const captured: Captured = { errors: [] }
@@ -182,9 +213,15 @@ test.describe("storybook stories", () => {
       )
       await waitForStoryReady(page, captured)
       await waitForPlayFinished(page)
-      const delayMs = await readDelayMs(page, story.id)
-      if (delayMs > 0) {
-        await page.waitForTimeout(delayMs)
+      const params = await readScreenshotParams(page, story.id)
+      // Per-story viewport allowlist: skip this story in unlisted viewports.
+      test.skip(
+        params.viewports !== undefined &&
+          !params.viewports.includes(meta.viewportName),
+        `story limited to viewports: ${params.viewports?.join(", ")}`
+      )
+      if (params.delay > 0) {
+        await page.waitForTimeout(params.delay)
       }
       // <folder>/<story>[-<theme>].png, optionally co-located under the story's
       // own source directory (…/__screenshots__/…) instead of the snapshotDir.
@@ -194,7 +231,13 @@ test.describe("storybook stories", () => {
           ? `${posix.dirname(story.importPath.replace(/^\.\//, ""))}/__screenshots__/${baseName}`
           : baseName
       await expect(page).toHaveScreenshot(snapshotName, {
-        fullPage: options.fullPage,
+        fullPage: params.fullPage ?? options.fullPage,
+        ...(params.mask.length > 0
+          ? { mask: params.mask.map((selector) => page.locator(selector)) }
+          : {}),
+        ...(params.maxDiffPixelRatio !== undefined
+          ? { maxDiffPixelRatio: params.maxDiffPixelRatio }
+          : {}),
       })
     })
   }

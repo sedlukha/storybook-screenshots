@@ -59,6 +59,7 @@ const projects = options.browsers.flatMap((browser) =>
           theme,
           snapshotFolder: folderSegments.join("-"),
           snapshotSuffix,
+          viewportName: viewport.name,
         },
       }
     })

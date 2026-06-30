@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-06-30
+
+### Added
+
+- Per-story capture options via Storybook `parameters.screenshot`, read at
+  runtime — useful for app stories with dynamic content:
+  - `mask`: CSS selectors to hide before capturing (timestamps, avatars…).
+  - `fullPage`, `maxDiffPixelRatio`: per-story overrides of the global settings.
+  - `viewports`: capture the story only in the listed viewport names.
+  - `delay` continues to work (with `chromatic.delay` as a fallback).
+- Exported `ScreenshotParameters` type for typing a story's `parameters`.
+
 ## [0.7.0] - 2026-06-30
 
 ### Added
@@ -123,6 +135,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Per-story tests across a browser × viewport × theme matrix, themes applied via
   Storybook globals.
 
+[0.8.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.8.0
 [0.7.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.7.0
 [0.6.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.6.0
 [0.5.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.5.0

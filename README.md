@@ -190,30 +190,35 @@ captured in their **settled, post-interaction state**: the runner waits for the
 play function to finish before screenshotting. No per-story config needed. If a
 story never settles it is captured anyway rather than failing the run.
 
-## Per-story delay
+## Per-story options
 
-For content that appears late for other reasons (not a play function), declare an
-extra pause (in milliseconds) before the screenshot via Storybook parameters; it's
-read at runtime per story and applied after the play wait:
+Stories can tune their own capture via Storybook `parameters.screenshot`, read at
+runtime (type them with the exported `ScreenshotParameters`):
 
 ```ts
-export const OpensDialog = {
-  parameters: { screenshot: { delay: 500 } },
-  play: async ({ canvasElement }) => {
-    /* … open the dialog … */
+import type { ScreenshotParameters } from "storybook-screenshots"
+
+export const Notifications = {
+  parameters: {
+    screenshot: {
+      delay: 500,                       // extra pause before capture (ms)
+      mask: ["[data-testid=avatar]", ".timestamp"], // hide dynamic content
+      fullPage: false,                  // override the global fullPage
+      maxDiffPixelRatio: 0.02,          // looser threshold for this story
+      viewports: ["mobile"],            // capture only in these viewports
+    } satisfies ScreenshotParameters,
   },
 }
 ```
 
-`chromatic.delay` is honored too, so stories already annotated for
-[Chromatic](https://www.chromatic.com/docs/delay/) work unchanged:
-
-```ts
-parameters: { chromatic: { delay: 500 } }
-```
-
-`screenshot.delay` wins if both are set. Unset means no wait. (Animations are
-already disabled during capture; the delay is for content that appears late.)
+- **`mask`** — CSS selectors painted over before the screenshot; the go-to for
+  app stories with timestamps, avatars, or other unavoidable churn.
+- **`fullPage` / `maxDiffPixelRatio`** — per-story overrides of the global config.
+- **`viewports`** — restrict the story to the listed viewport names.
+- **`delay`** — pause before capture; `chromatic.delay` is honored as a fallback,
+  so stories already annotated for
+  [Chromatic](https://www.chromatic.com/docs/delay/) work unchanged. The delay is
+  applied *after* the play-function wait (animations are already disabled).
 
 ## CI
 

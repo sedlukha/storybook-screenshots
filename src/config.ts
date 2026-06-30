@@ -52,6 +52,24 @@ export interface ScreenshotTheme {
   group?: string
 }
 
+/**
+ * Per-story capture options, read at runtime from Storybook
+ * `parameters.screenshot`. Type your story's `parameters` against this for
+ * autocomplete. `parameters.chromatic.delay` is also honored for `delay`.
+ */
+export interface ScreenshotParameters {
+  /** Pause before capturing (ms) — e.g. for content that appears late. */
+  delay?: number
+  /** CSS selectors to mask (hide) before capturing — for dynamic content. */
+  mask?: string[]
+  /** Override `fullPage` for this story. */
+  fullPage?: boolean
+  /** Override `maxDiffPixelRatio` for this story. */
+  maxDiffPixelRatio?: number
+  /** Capture this story only in these viewport names. */
+  viewports?: string[]
+}
+
 export interface StorybookScreenshotsConfig {
   /**
    * Command that builds Storybook into `storybookDir`. Omit if you build

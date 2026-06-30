@@ -10,6 +10,7 @@ export {
 export { defineConfig } from "./config.js"
 export type {
   ScreenshotBrowser,
+  ScreenshotParameters,
   ScreenshotTheme,
   ScreenshotViewport,
   StorybookScreenshotsConfig,
