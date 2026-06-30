@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs"
-import { join } from "node:path"
+import { join, posix } from "node:path"
 import { expect, type Page, test } from "@playwright/test"
 import type { ScreenshotTheme } from "../config.js"
 import { readRuntimeOptions } from "./options.js"
@@ -8,6 +8,8 @@ interface StoryEntry {
   id: string
   type: "docs" | "story"
   tags?: string[]
+  /** Story source file, relative to the repo root (e.g. `./button/button.stories.tsx`). */
+  importPath?: string
 }
 
 interface StorybookIndex {
@@ -157,8 +159,12 @@ async function readDelayMs(page: Page, storyId: string): Promise<number> {
 test.describe("storybook stories", () => {
   for (const story of stories) {
     test(story.id, async ({ page }, testInfo) => {
-      const theme = (testInfo.project.metadata as { theme?: ScreenshotTheme })
-        .theme ?? null
+      const meta = testInfo.project.metadata as {
+        theme?: ScreenshotTheme
+        snapshotFolder: string
+        snapshotSuffix: string
+      }
+      const theme = meta.theme ?? null
       const captured: Captured = { errors: [] }
       page.on("console", (message) => {
         const type = message.type()
@@ -180,7 +186,14 @@ test.describe("storybook stories", () => {
       if (delayMs > 0) {
         await page.waitForTimeout(delayMs)
       }
-      await expect(page).toHaveScreenshot(`${story.id}.png`, {
+      // <folder>/<story>[-<theme>].png, optionally co-located under the story's
+      // own source directory (…/__screenshots__/…) instead of the snapshotDir.
+      const baseName = `${meta.snapshotFolder}/${story.id}${meta.snapshotSuffix}.png`
+      const snapshotName =
+        options.colocate && story.importPath
+          ? `${posix.dirname(story.importPath.replace(/^\.\//, ""))}/__screenshots__/${baseName}`
+          : baseName
+      await expect(page).toHaveScreenshot(snapshotName, {
         fullPage: options.fullPage,
       })
     })

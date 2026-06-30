@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-06-30
+
+### Added
+
+- Theme folder grouping. A theme can set `group` to share one baseline folder
+  with other themes in the same group, told apart by a `-<name>` filename suffix.
+  Baselines go to `<snapshotDir>/<browser>-<viewport>-<group>/<story>-<name>.png`
+  instead of a separate `…-<name>` folder per theme — e.g. light/dark variants of
+  a brand sit together. Themes without `group` are unchanged.
+- `colocate` option to keep each story's baselines next to its source file:
+  `<story dir>/__screenshots__/<browser>-<viewport>[-<theme>]/<story>.png`
+  instead of a single `snapshotDir` tree. The path is derived from the story's
+  `importPath`. `snapshotDir` still holds the manifest by default.
+
 ## [0.6.0] - 2026-06-30
 
 ### Added
@@ -109,6 +123,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Per-story tests across a browser × viewport × theme matrix, themes applied via
   Storybook globals.
 
+[0.7.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.7.0
 [0.6.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.6.0
 [0.5.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.5.0
 [0.4.1]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.4.1

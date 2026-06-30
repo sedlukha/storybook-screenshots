@@ -13,21 +13,33 @@ const DEVICE_BY_BROWSER: Record<ScreenshotBrowser, string> = {
 
 const runtimeDir = fileURLToPath(new URL(".", import.meta.url))
 
-// One Playwright project per browser × viewport × theme. The project name
-// becomes the snapshot folder, so every combination gets its own baseline.
+// One Playwright project per browser × viewport × theme. Each project carries
+// the snapshot folder + filename suffix for its baselines (see below).
 const themeList: (ScreenshotTheme | null)[] =
   options.themes.length > 0 ? options.themes : [null]
 
 const projects = options.browsers.flatMap((browser) =>
   options.viewports.flatMap((viewport) =>
     themeList.map((theme) => {
-      const segments = [browser, viewport.name]
+      // Folder = browser-viewport[-group|-name]; a grouped theme's name moves to
+      // a filename suffix so its variants (light/dark) share one folder. The
+      // project name keeps group AND name so it stays unique for Playwright.
+      const folderSegments = [browser, viewport.name]
+      const nameSegments = [browser, viewport.name]
+      let snapshotSuffix = ""
       if (theme) {
-        segments.push(theme.name)
+        if (theme.group) {
+          folderSegments.push(theme.group)
+          nameSegments.push(theme.group, theme.name)
+          snapshotSuffix = `-${theme.name}`
+        } else {
+          folderSegments.push(theme.name)
+          nameSegments.push(theme.name)
+        }
       }
       const device = devices[DEVICE_BY_BROWSER[browser]] ?? {}
       return {
-        name: segments.join("-"),
+        name: nameSegments.join("-"),
         use: {
           ...device,
           viewport: { width: viewport.width, height: viewport.height },
@@ -43,7 +55,11 @@ const projects = options.browsers.flatMap((browser) =>
             ? { hasTouch: viewport.hasTouch }
             : {}),
         },
-        metadata: { theme },
+        metadata: {
+          theme,
+          snapshotFolder: folderSegments.join("-"),
+          snapshotSuffix,
+        },
       }
     })
   )
@@ -53,7 +69,11 @@ export default defineConfig({
   testDir: runtimeDir,
   testMatch: /stories\.spec\.(js|ts)$/,
   // Absolute template so baselines land in the consumer repo, not node_modules.
-  snapshotPathTemplate: `${options.snapshotDir}/{projectName}/{arg}{ext}`,
+  // {arg} carries the full folder/file path the spec builds from project metadata
+  // (so grouped themes can share a folder), not the unique project name. In
+  // colocate mode the base is the repo root and {arg} starts from each story's
+  // source directory.
+  snapshotPathTemplate: `${options.colocate ? options.rootDir : options.snapshotDir}/{arg}{ext}`,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   maxFailures: options.failFast ? 1 : undefined,

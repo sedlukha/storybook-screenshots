@@ -95,10 +95,11 @@ changed-story allowlist without capturing:
 | ------------------- | -------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
 | `buildCommand`      | `string`                               | —                                            | Command that builds Storybook into `storybookDir`. Omit if pre-built.    |
 | `storybookDir`      | `string`                               | `"storybook-static"`                         | Built Storybook directory (must contain `index.json`).                   |
-| `snapshotDir`       | `string`                               | `"__screenshots__"`                          | Where baseline PNGs are written/compared.                                |
+| `snapshotDir`       | `string`                               | `"__screenshots__"`                          | Where baseline PNGs are written/compared (holds the manifest under `colocate`). |
+| `colocate`          | `boolean`                              | `false`                                      | Store baselines next to each story's source file (see [Co-location](#co-location)). |
 | `browsers`          | `("chromium"\|"firefox"\|"webkit")[]`  | `["chromium"]`                               | Browsers to capture.                                                     |
 | `viewports`         | `ScreenshotViewport[]`                 | `[{ name: "desktop", width: 1280, height: 800 }]` | Viewports/devices to capture (see [Device types](#device-types)). |
-| `themes`            | `{ name, globals }[]`                  | `[]`                                         | Themes applied via Storybook globals (`?globals=theme:dark`).            |
+| `themes`            | `{ name, globals, group? }[]`          | `[]`                                         | Themes applied via Storybook globals (`?globals=theme:dark`).            |
 | `skipTags`          | `string[]`                             | `["!screenshot"]`                            | Skip stories carrying any of these Storybook tags.                       |
 | `fullPage`          | `boolean`                              | `true`                                       | Capture the full scrollable page.                                        |
 | `maxDiffPixelRatio` | `number`                               | `0.01`                                       | Allowed differing-pixel ratio before a story fails.                      |
@@ -111,6 +112,9 @@ changed-story allowlist without capturing:
 | `port`              | `number`                               | `6007`                                       | Port for the built-in static server.                                     |
 
 Baselines are written to `<snapshotDir>/<browser>-<viewport>[-<theme>]/<story-id>.png`.
+With theme `group`s, the group is the folder and the theme name becomes a filename
+suffix: `<snapshotDir>/<browser>-<viewport>-<group>/<story-id>-<name>.png` (see
+[Themes](#themes)).
 
 ## Device types
 
@@ -146,6 +150,38 @@ works with whatever theming your Storybook already exposes (a `theme` global, a
 toolbar, decorators…). `{ name: "dark", globals: { theme: "dark" } }` loads each
 story with `?globals=theme:dark` and stores its baselines under a `…-dark`
 folder.
+
+Set `group` to make related themes share one folder, distinguished by a filename
+suffix instead of a separate folder each — handy for keeping a brand's light and
+dark variants together:
+
+```js
+themes: [
+  { name: "light", group: "quizbase", globals: { theme: "quizbase-light" } },
+  { name: "dark",  group: "quizbase", globals: { theme: "quizbase-dark" } },
+  { name: "light", group: "acme",     globals: { theme: "acme-light" } },
+  { name: "dark",  group: "acme",     globals: { theme: "acme-dark" } },
+]
+// → <browser>-<viewport>-quizbase/<story>-light.png + …-quizbase/<story>-dark.png
+//   <browser>-<viewport>-acme/<story>-light.png     + …-acme/<story>-dark.png
+```
+
+## Co-location
+
+Set `colocate: true` to store each story's baselines next to its source file
+instead of in one `snapshotDir` tree. The folder is derived from the story's
+`importPath`:
+
+```
+src/button/
+  button.stories.tsx
+  __screenshots__/
+    chromium-desktop/button--default.png
+```
+
+Combine with theme `group`s and a snapshot glob that matches the new location
+(e.g. `src/**/__screenshots__/**`). The manifest is a single file and still lives
+under `snapshotDir` (or set `manifestFile`).
 
 ## Interactive stories
 

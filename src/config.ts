@@ -32,13 +32,24 @@ export interface ScreenshotViewport {
 }
 
 export interface ScreenshotTheme {
-  /** Label used as a snapshot path segment. */
+  /**
+   * Theme label. By default it's the folder segment for this theme's baselines.
+   * When `group` is set, it instead becomes a filename suffix, so themes sharing
+   * a group land in one folder (e.g. light/dark variants of a brand).
+   */
   name: string
   /**
    * Storybook globals applied via the iframe `globals` query param,
    * e.g. `{ theme: "dark" }` → `&globals=theme:dark`.
    */
   globals: Record<string, string>
+  /**
+   * Optional folder grouping. Themes with the same `group` share one baseline
+   * folder (`…-<group>`) and are told apart by a `-<name>` filename suffix —
+   * e.g. group `"quizbase"` with names `"light"`/`"dark"` →
+   * `…-quizbase/<story>-light.png` and `…-quizbase/<story>-dark.png`.
+   */
+  group?: string
 }
 
 export interface StorybookScreenshotsConfig {
@@ -49,8 +60,19 @@ export interface StorybookScreenshotsConfig {
   buildCommand?: string
   /** Built Storybook directory (must contain `index.json`). Default: `storybook-static`. */
   storybookDir?: string
-  /** Directory where baseline PNGs are written and compared. Default: `__screenshots__`. */
+  /**
+   * Directory where baseline PNGs are written and compared. Default:
+   * `__screenshots__`. Ignored for baseline images when `colocate` is on (still
+   * used as the default location for `manifestFile`).
+   */
   snapshotDir?: string
+  /**
+   * Co-locate each story's baselines next to its source file instead of in a
+   * single `snapshotDir` tree: baselines go to
+   * `<dir of the story file>/__screenshots__/<browser>-<viewport>[-<theme>]/<story>.png`.
+   * Default: `false`.
+   */
+  colocate?: boolean
   /** Browsers to capture. Default: `["chromium"]`. */
   browsers?: ScreenshotBrowser[]
   /** Viewports to capture. Default: `[{ name: "desktop", width: 1280, height: 800 }]`. */
@@ -109,6 +131,9 @@ export interface ResolvedConfig {
   buildCommand: string | null
   storybookDir: string
   snapshotDir: string
+  /** Repo root (config file's directory) — base for co-located baseline paths. */
+  rootDir: string
+  colocate: boolean
   browsers: ScreenshotBrowser[]
   viewports: ScreenshotViewport[]
   themes: ScreenshotTheme[]
@@ -173,6 +198,8 @@ export function resolveConfig(
     buildCommand: config.buildCommand ?? null,
     storybookDir,
     snapshotDir,
+    rootDir,
+    colocate: config.colocate ?? false,
     browsers: config.browsers ?? ["chromium"],
     viewports: config.viewports ?? [
       { name: "desktop", width: 1280, height: 800 },

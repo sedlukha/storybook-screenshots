@@ -87,6 +87,8 @@ export async function run(opts: RunOptions = {}): Promise<number> {
     const runtimeOptions: RuntimeOptions = {
       storybookDir: config.storybookDir,
       snapshotDir: config.snapshotDir,
+      rootDir: config.rootDir,
+      colocate: config.colocate,
       baseURL: server.url,
       browsers: config.browsers,
       viewports: config.viewports,

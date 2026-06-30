@@ -8,6 +8,10 @@ import type {
 export interface RuntimeOptions {
   storybookDir: string
   snapshotDir: string
+  /** Repo root — base for co-located baseline paths. */
+  rootDir: string
+  /** Place baselines next to each story's source file. */
+  colocate: boolean
   baseURL: string
   browsers: ScreenshotBrowser[]
   viewports: ScreenshotViewport[]
