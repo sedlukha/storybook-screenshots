@@ -46,8 +46,8 @@ export interface ScreenshotTheme {
   /**
    * Optional folder grouping. Themes with the same `group` share one baseline
    * folder (`…-<group>`) and are told apart by a `-<name>` filename suffix —
-   * e.g. group `"quizbase"` with names `"light"`/`"dark"` →
-   * `…-quizbase/<story>-light.png` and `…-quizbase/<story>-dark.png`.
+   * e.g. group `"acme"` with names `"light"`/`"dark"` →
+   * `…-acme/<story>-light.png` and `…-acme/<story>-dark.png`.
    */
   group?: string
 }

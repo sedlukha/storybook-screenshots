@@ -157,13 +157,13 @@ dark variants together:
 
 ```js
 themes: [
-  { name: "light", group: "quizbase", globals: { theme: "quizbase-light" } },
-  { name: "dark",  group: "quizbase", globals: { theme: "quizbase-dark" } },
-  { name: "light", group: "acme",     globals: { theme: "acme-light" } },
-  { name: "dark",  group: "acme",     globals: { theme: "acme-dark" } },
+  { name: "light", group: "acme",   globals: { theme: "acme-light" } },
+  { name: "dark",  group: "acme",   globals: { theme: "acme-dark" } },
+  { name: "light", group: "globex", globals: { theme: "globex-light" } },
+  { name: "dark",  group: "globex", globals: { theme: "globex-dark" } },
 ]
-// → <browser>-<viewport>-quizbase/<story>-light.png + …-quizbase/<story>-dark.png
-//   <browser>-<viewport>-acme/<story>-light.png     + …-acme/<story>-dark.png
+// → <browser>-<viewport>-acme/<story>-light.png   + …-acme/<story>-dark.png
+//   <browser>-<viewport>-globex/<story>-light.png + …-globex/<story>-dark.png
 ```
 
 ## Co-location
