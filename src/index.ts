@@ -1,8 +1,11 @@
 export {
   type AffectedResult,
+  buildManifest,
   type ComputeAffectedOptions,
   computeAffected,
   DEFAULT_GLOBAL_DEPS,
+  type Manifest,
+  type ManifestOptions,
 } from "./affected.js"
 export { defineConfig } from "./config.js"
 export type {

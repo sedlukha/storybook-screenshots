@@ -1,6 +1,6 @@
 {
   "name": "storybook-screenshots",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Screenshot every Storybook story with Playwright. A config file in your repo, a CLI that builds, serves, and captures — themes, viewports, and browsers included.",
   "keywords": [
     "storybook",

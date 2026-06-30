@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-30
+
+### Changed
+
+- Incremental mode now uses a committed **fingerprint manifest** instead of a git
+  diff. For each story it hashes the transitive source it renders from (npm deps
+  by their versioned module path, source files by content) plus a global
+  fingerprint (config, `.storybook`, tool versions), and compares against the
+  committed `manifest.json`. Benefits over the git approach:
+  - No base ref or `git fetch` — works the same on PRs and on push to the default
+    branch (after a merge, fingerprints match → nothing re-runs).
+  - A dependency bump re-captures only the stories that actually use it (the
+    version lives in the module path); a theme/config/global change re-captures all.
+- `--changed` is now a boolean flag (no ref argument); `affected` no longer takes
+  `--base`. The `affected` subcommand refreshes `manifest.json` and writes the
+  `--only` allowlist. New `manifestFile` config; `globalDeps` is now a list of
+  paths/dirs folded into the global fingerprint (default `[".storybook"]`).
+- API: `computeAffected` signature changed; added `buildManifest`, `Manifest`,
+  and `ManifestOptions` exports.
+
 ## [0.4.1] - 2026-06-29
 
 ### Fixed
@@ -75,6 +95,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Per-story tests across a browser × viewport × theme matrix, themes applied via
   Storybook globals.
 
+[0.5.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.5.0
 [0.4.1]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.4.1
 [0.4.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.4.0
 [0.3.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.3.0

@@ -33,11 +33,10 @@ function resolveOnly(value: string | undefined): string[] | undefined {
 
 const configPath = flagValue("--config", "-c")
 
-// `affected` subcommand: compute the changed-story allowlist and print/write it.
+// `affected` subcommand: refresh the manifest and write the changed-story allowlist.
 if (argv[0] === "affected") {
-  const baseRef = flagValue("--base") ?? "origin/master"
   const out = flagValue("--out")
-  affected({ baseRef, configPath, out })
+  affected({ configPath, out })
     .then((result) => {
       console.log(
         result.all
@@ -57,8 +56,8 @@ if (argv[0] === "affected") {
   // Skip the build and screenshot a Storybook built elsewhere (e.g. a shared CI
   // artifact reused by every shard). `storybookDir` must already exist.
   const skipBuild = argv.includes("--no-build")
-  // Incremental: diff against this ref and capture only affected stories.
-  const changed = flagValue("--changed")
+  // Incremental: capture only stories whose fingerprint changed (manifest diff).
+  const changed = argv.includes("--changed")
   // Run a precomputed allowlist (file or comma list) — pairs with `affected`.
   const only = resolveOnly(flagValue("--only"))
 

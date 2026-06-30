@@ -80,10 +80,17 @@ export interface StorybookScreenshotsConfig {
    */
   statsFile?: string
   /**
-   * Globs (relative to the repo root) that force capturing every story when a
-   * matching file changes — inputs that affect rendering globally or that the
-   * module graph can't trace (config, `.storybook/**`, lockfiles, tailwind…).
-   * Default: a conservative built-in list (see `DEFAULT_GLOBAL_DEPS`).
+   * Committed fingerprint manifest for incremental mode. Lives under
+   * `snapshotDir` so it travels with the baselines. Default:
+   * `<snapshotDir>/manifest.json`.
+   */
+  manifestFile?: string
+  /**
+   * Files/dirs (relative to the repo root) folded into the global fingerprint —
+   * inputs that affect rendering globally and aren't traced per-story (Storybook
+   * config, global styles…). A change here re-captures every story. npm
+   * dependencies are traced per-story via their versioned module paths, so they
+   * don't belong here. Default: `[".storybook"]` (see `DEFAULT_GLOBAL_DEPS`).
    */
   globalDeps?: string[]
   /** Port for the built-in static server. Default: `6007`. */
@@ -112,6 +119,7 @@ export interface ResolvedConfig {
   retries: number
   workers: number | string | null
   statsFile: string
+  manifestFile: string
   globalDeps: string[]
   port: number
 }
@@ -160,10 +168,11 @@ export function resolveConfig(
 ): ResolvedConfig {
   const toAbs = (p: string) => (isAbsolute(p) ? p : resolve(rootDir, p))
   const storybookDir = toAbs(config.storybookDir ?? "storybook-static")
+  const snapshotDir = toAbs(config.snapshotDir ?? "__screenshots__")
   return {
     buildCommand: config.buildCommand ?? null,
     storybookDir,
-    snapshotDir: toAbs(config.snapshotDir ?? "__screenshots__"),
+    snapshotDir,
     browsers: config.browsers ?? ["chromium"],
     viewports: config.viewports ?? [
       { name: "desktop", width: 1280, height: 800 },
@@ -176,6 +185,7 @@ export function resolveConfig(
     retries: config.retries ?? 2,
     workers: config.workers ?? null,
     statsFile: toAbs(config.statsFile ?? join(storybookDir, "preview-stats.json")),
+    manifestFile: toAbs(config.manifestFile ?? join(snapshotDir, "manifest.json")),
     globalDeps: config.globalDeps ?? DEFAULT_GLOBAL_DEPS,
     port: config.port ?? 6007,
   }

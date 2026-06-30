@@ -2,7 +2,11 @@ import { execSync, spawn } from "node:child_process"
 import { existsSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { type AffectedResult, computeAffected } from "./affected.js"
+import {
+  type AffectedResult,
+  computeAffected,
+  type Manifest,
+} from "./affected.js"
 import { findConfigFile, loadConfig, resolveConfig } from "./config.js"
 import { RUNTIME_ENV_KEY, type RuntimeOptions } from "./runtime/options.js"
 import { startStaticServer } from "./runtime/serve.js"
@@ -19,10 +23,15 @@ export interface RunOptions {
   /** Restrict the run to these story IDs (a precomputed allowlist). */
   only?: string[]
   /**
-   * Incremental mode: diff against this git ref, then capture only the stories
-   * the change set can affect (reuses committed baselines for the rest).
+   * Incremental mode: capture only stories whose fingerprint changed since the
+   * committed manifest (reuses committed baselines for the rest), then rewrite
+   * the manifest on success.
    */
-  changed?: string
+  changed?: boolean
+}
+
+function writeManifest(path: string, manifest: Manifest): void {
+  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
 export async function run(opts: RunOptions = {}): Promise<number> {
@@ -50,19 +59,22 @@ export async function run(opts: RunOptions = {}): Promise<number> {
     )
   }
 
-  // Resolve the story allowlist: an explicit --only list, or compute it from a
-  // --changed diff. `null` means "every story".
+  // Resolve the story allowlist: an explicit --only list, or compute it from the
+  // fingerprint manifest in --changed mode. `null` means "every story".
   let only: string[] | null = opts.only ?? null
+  let pendingManifest: Manifest | null = null
   if (opts.changed) {
     const result = computeAffected({
       rootDir,
-      baseRef: opts.changed,
       statsPath: config.statsFile,
       indexPath: join(config.storybookDir, "index.json"),
+      configPath,
       globalDeps: config.globalDeps,
+      manifestPath: config.manifestFile,
     })
     console.log(`▶ incremental: ${result.reason}`)
     only = result.all ? null : result.storyIds
+    pendingManifest = result.manifest
   }
   if (only && only.length === 0) {
     console.log("✔ no affected stories — nothing to capture.")
@@ -70,6 +82,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
   }
 
   const server = await startStaticServer(config.storybookDir, config.port)
+  let code: number
   try {
     const runtimeOptions: RuntimeOptions = {
       storybookDir: config.storybookDir,
@@ -86,19 +99,25 @@ export async function run(opts: RunOptions = {}): Promise<number> {
       workers: config.workers,
       only,
     }
-    return await runPlaywright(rootDir, !!opts.update, runtimeOptions, opts.shard)
+    code = await runPlaywright(rootDir, !!opts.update, runtimeOptions, opts.shard)
   } finally {
     await server.close()
   }
+  // Only record the new fingerprints once the affected stories actually passed,
+  // so a failed run doesn't mark broken stories as up to date.
+  if (code === 0 && pendingManifest) {
+    writeManifest(config.manifestFile, pendingManifest)
+  }
+  return code
 }
 
 /**
- * Compute which stories a change set since `baseRef` affects and, optionally,
- * write the allowlist to `out` as `{ all, storyIds }` for a sharded CI run to
- * consume via `--only`.
+ * Compare the freshly built fingerprint manifest against the committed one to
+ * find affected stories. Rewrites the committed manifest in place (so it can be
+ * committed alongside the new baselines) and, optionally, writes the allowlist
+ * to `out` as `{ all, storyIds }` for a sharded CI run to consume via `--only`.
  */
 export async function affected(opts: {
-  baseRef: string
   configPath?: string
   out?: string
 }): Promise<AffectedResult> {
@@ -115,11 +134,13 @@ export async function affected(opts: {
   const config = resolveConfig(await loadConfig(configPath), rootDir)
   const result = computeAffected({
     rootDir,
-    baseRef: opts.baseRef,
     statsPath: config.statsFile,
     indexPath: join(config.storybookDir, "index.json"),
+    configPath,
     globalDeps: config.globalDeps,
+    manifestPath: config.manifestFile,
   })
+  writeManifest(config.manifestFile, result.manifest)
   if (opts.out) {
     writeFileSync(
       resolve(rootDir, opts.out),
