@@ -84,6 +84,76 @@ async function waitForStoryReady(page: Page, captured: Captured) {
   await page.evaluate(() => document.fonts.ready)
 }
 
+// Render phases that mean the play function has finished (or failed). Once the
+// render reaches one of these the DOM reflects the post-interaction state.
+const PLAY_DONE_PHASES = [
+  "played",
+  "completing",
+  "completed",
+  "afterEach",
+  "finished",
+  "errored",
+  "aborted",
+]
+
+// Wait for Storybook's play function to finish before capturing, so interactive
+// stories (a play opening a dialog, a hover revealing a tooltip) are shot in
+// their settled state — not the initial pre-interaction render. Best-effort: if
+// the render never reports a terminal phase, capture anyway rather than fail.
+async function waitForPlayFinished(page: Page) {
+  await page
+    .waitForFunction(
+      (donePhases: string[]) => {
+        const preview = (
+          window as unknown as {
+            __STORYBOOK_PREVIEW__?: { currentRender?: { phase?: string } }
+          }
+        ).__STORYBOOK_PREVIEW__
+        if (!preview) {
+          return true
+        }
+        const render = preview.currentRender
+        if (!render) {
+          return false
+        }
+        return render.phase === undefined || donePhases.includes(render.phase)
+      },
+      PLAY_DONE_PHASES,
+      { timeout: 15_000 }
+    )
+    .catch(() => {
+      // Captured anyway — a story that never settles still yields a baseline.
+    })
+}
+
+// Per-story pause before capturing, for stories that settle asynchronously
+// (a play function opening a dialog, a delayed reveal…). Reads Storybook
+// parameters at runtime: `screenshot.delay` (this tool) or `chromatic.delay`
+// (Chromatic-compatible), in milliseconds. Returns 0 when unset/unavailable.
+async function readDelayMs(page: Page, storyId: string): Promise<number> {
+  const delay = await page
+    .evaluate(async (id) => {
+      const preview = (
+        window as unknown as {
+          __STORYBOOK_PREVIEW__?: {
+            loadStory?: (opts: { storyId: string }) => Promise<{
+              parameters?: {
+                screenshot?: { delay?: number }
+                chromatic?: { delay?: number }
+              }
+            }>
+          }
+        }
+      ).__STORYBOOK_PREVIEW__
+      const story = await preview?.loadStory?.({ storyId: id })
+      const params = story?.parameters
+      const value = params?.screenshot?.delay ?? params?.chromatic?.delay
+      return typeof value === "number" ? value : 0
+    }, storyId)
+    .catch(() => 0)
+  return delay > 0 ? delay : 0
+}
+
 test.describe("storybook stories", () => {
   for (const story of stories) {
     test(story.id, async ({ page }, testInfo) => {
@@ -105,6 +175,11 @@ test.describe("storybook stories", () => {
         { waitUntil: "domcontentloaded" }
       )
       await waitForStoryReady(page, captured)
+      await waitForPlayFinished(page)
+      const delayMs = await readDelayMs(page, story.id)
+      if (delayMs > 0) {
+        await page.waitForTimeout(delayMs)
+      }
       await expect(page).toHaveScreenshot(`${story.id}.png`, {
         fullPage: options.fullPage,
       })

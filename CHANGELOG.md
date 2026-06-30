@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-06-30
+
+### Added
+
+- Wait for the play function before capturing. Interactive stories (a play that
+  opens a dialog, hovers to reveal a tooltip) are now shot in their settled,
+  post-interaction state instead of the initial render — the runner waits for the
+  Storybook render to reach a terminal phase. Best-effort: a story that never
+  settles is still captured rather than failing the run.
+- Per-story capture delay, on top of the play wait, for content that appears late
+  for other reasons. Declared via Storybook parameters, read at runtime:
+  `screenshot.delay` (this tool) or `chromatic.delay` (Chromatic-compatible), in
+  milliseconds. Unset → no extra wait.
+
 ## [0.5.0] - 2026-06-30
 
 ### Changed
@@ -95,6 +109,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Per-story tests across a browser × viewport × theme matrix, themes applied via
   Storybook globals.
 
+[0.6.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.6.0
 [0.5.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.5.0
 [0.4.1]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.4.1
 [0.4.0]: https://github.com/sedlukha/storybook-screenshots/releases/tag/v0.4.0

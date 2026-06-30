@@ -147,6 +147,38 @@ toolbar, decorators…). `{ name: "dark", globals: { theme: "dark" } }` loads ea
 story with `?globals=theme:dark` and stores its baselines under a `…-dark`
 folder.
 
+## Interactive stories
+
+Stories with a play function (opening a dialog, hovering to reveal a tooltip) are
+captured in their **settled, post-interaction state**: the runner waits for the
+play function to finish before screenshotting. No per-story config needed. If a
+story never settles it is captured anyway rather than failing the run.
+
+## Per-story delay
+
+For content that appears late for other reasons (not a play function), declare an
+extra pause (in milliseconds) before the screenshot via Storybook parameters; it's
+read at runtime per story and applied after the play wait:
+
+```ts
+export const OpensDialog = {
+  parameters: { screenshot: { delay: 500 } },
+  play: async ({ canvasElement }) => {
+    /* … open the dialog … */
+  },
+}
+```
+
+`chromatic.delay` is honored too, so stories already annotated for
+[Chromatic](https://www.chromatic.com/docs/delay/) work unchanged:
+
+```ts
+parameters: { chromatic: { delay: 500 } }
+```
+
+`screenshot.delay` wins if both are set. Unset means no wait. (Animations are
+already disabled during capture; the delay is for content that appears late.)
+
 ## CI
 
 Generate baselines on one OS (CI) so they are deterministic — font rendering
