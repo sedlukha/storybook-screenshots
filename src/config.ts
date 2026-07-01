@@ -5,6 +5,9 @@ import { DEFAULT_GLOBAL_DEPS } from "./affected.js"
 
 export type ScreenshotBrowser = "chromium" | "firefox" | "webkit"
 
+/** A folder segment in a baseline path: the browser, the viewport, or the theme. */
+export type PathSegment = "browser" | "viewport" | "theme"
+
 export interface ScreenshotViewport {
   /** Label used as a snapshot path segment (part of the project name). */
   name: string
@@ -91,6 +94,17 @@ export interface StorybookScreenshotsConfig {
    * Default: `false`.
    */
   colocate?: boolean
+  /**
+   * Order of the folder segments in a baseline's path. `"theme"` resolves to the
+   * theme's `group` (or `name` when ungrouped). Combine with `nestedFolders` to
+   * shape the layout. Default: `["browser", "viewport", "theme"]`.
+   */
+  pathSegments?: PathSegment[]
+  /**
+   * Nest the path segments as folders (`browser/theme/viewport/`) instead of
+   * joining them with `-` (`browser-viewport-theme/`). Default: `false`.
+   */
+  nestedFolders?: boolean
   /** Browsers to capture. Default: `["chromium"]`. */
   browsers?: ScreenshotBrowser[]
   /** Viewports to capture. Default: `[{ name: "desktop", width: 1280, height: 800 }]`. */
@@ -152,6 +166,8 @@ export interface ResolvedConfig {
   /** Repo root (config file's directory) — base for co-located baseline paths. */
   rootDir: string
   colocate: boolean
+  pathSegments: PathSegment[]
+  nestedFolders: boolean
   browsers: ScreenshotBrowser[]
   viewports: ScreenshotViewport[]
   themes: ScreenshotTheme[]
@@ -218,6 +234,8 @@ export function resolveConfig(
     snapshotDir,
     rootDir,
     colocate: config.colocate ?? false,
+    pathSegments: config.pathSegments ?? ["browser", "viewport", "theme"],
+    nestedFolders: config.nestedFolders ?? false,
     browsers: config.browsers ?? ["chromium"],
     viewports: config.viewports ?? [
       { name: "desktop", width: 1280, height: 800 },

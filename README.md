@@ -97,6 +97,8 @@ changed-story allowlist without capturing:
 | `storybookDir`      | `string`                               | `"storybook-static"`                         | Built Storybook directory (must contain `index.json`).                   |
 | `snapshotDir`       | `string`                               | `"__screenshots__"`                          | Where baseline PNGs are written/compared (holds the manifest under `colocate`). |
 | `colocate`          | `boolean`                              | `false`                                      | Store baselines next to each story's source file (see [Co-location](#co-location)). |
+| `pathSegments`      | `("browser"\|"viewport"\|"theme")[]`   | `["browser","viewport","theme"]`             | Order of the folder segments in a baseline path.                          |
+| `nestedFolders`     | `boolean`                              | `false`                                      | Nest segments as folders (`browser/theme/viewport/`) vs `-`-joined.       |
 | `browsers`          | `("chromium"\|"firefox"\|"webkit")[]`  | `["chromium"]`                               | Browsers to capture.                                                     |
 | `viewports`         | `ScreenshotViewport[]`                 | `[{ name: "desktop", width: 1280, height: 800 }]` | Viewports/devices to capture (see [Device types](#device-types)). |
 | `themes`            | `{ name, globals, group? }[]`          | `[]`                                         | Themes applied via Storybook globals (`?globals=theme:dark`).            |
@@ -114,7 +116,10 @@ changed-story allowlist without capturing:
 Baselines are written to `<snapshotDir>/<browser>-<viewport>[-<theme>]/<story-id>.png`.
 With theme `group`s, the group is the folder and the theme name becomes a filename
 suffix: `<snapshotDir>/<browser>-<viewport>-<group>/<story-id>-<name>.png` (see
-[Themes](#themes)).
+[Themes](#themes)). Reorder the segments with `pathSegments` and nest them as
+directories with `nestedFolders` — e.g. `pathSegments: ["browser","theme","viewport"]`
++ `nestedFolders: true` →
+`<snapshotDir>/<browser>/<group>/<viewport>/<story-id>-<name>.png`.
 
 ## Device types
 

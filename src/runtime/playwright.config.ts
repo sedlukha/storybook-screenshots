@@ -21,19 +21,26 @@ const themeList: (ScreenshotTheme | null)[] =
 const projects = options.browsers.flatMap((browser) =>
   options.viewports.flatMap((viewport) =>
     themeList.map((theme) => {
-      // Folder = browser-viewport[-group|-name]; a grouped theme's name moves to
-      // a filename suffix so its variants (light/dark) share one folder. The
-      // project name keeps group AND name so it stays unique for Playwright.
-      const folderSegments = [browser, viewport.name]
+      // Folder segments in the configured order; "theme" resolves to the group
+      // (or name when ungrouped). A grouped theme's name moves to a filename
+      // suffix so its variants (light/dark) share one folder. Joined with "/"
+      // (nested) or "-" (flat). The project name keeps every part flat so it
+      // stays unique for Playwright regardless of the layout.
+      const themeSegment = theme ? (theme.group ?? theme.name) : null
+      const segmentValue: Record<string, string | null> = {
+        browser,
+        viewport: viewport.name,
+        theme: themeSegment,
+      }
+      const folderSegments = options.pathSegments
+        .map((segment) => segmentValue[segment])
+        .filter((value): value is string => Boolean(value))
+      const snapshotSuffix = theme?.group ? `-${theme.name}` : ""
       const nameSegments = [browser, viewport.name]
-      let snapshotSuffix = ""
       if (theme) {
         if (theme.group) {
-          folderSegments.push(theme.group)
           nameSegments.push(theme.group, theme.name)
-          snapshotSuffix = `-${theme.name}`
         } else {
-          folderSegments.push(theme.name)
           nameSegments.push(theme.name)
         }
       }
@@ -57,7 +64,7 @@ const projects = options.browsers.flatMap((browser) =>
         },
         metadata: {
           theme,
-          snapshotFolder: folderSegments.join("-"),
+          snapshotFolder: folderSegments.join(options.nestedFolders ? "/" : "-"),
           snapshotSuffix,
           viewportName: viewport.name,
         },

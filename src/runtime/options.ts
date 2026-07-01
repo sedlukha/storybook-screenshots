@@ -1,4 +1,5 @@
 import type {
+  PathSegment,
   ScreenshotBrowser,
   ScreenshotTheme,
   ScreenshotViewport,
@@ -12,6 +13,8 @@ export interface RuntimeOptions {
   rootDir: string
   /** Place baselines next to each story's source file. */
   colocate: boolean
+  pathSegments: PathSegment[]
+  nestedFolders: boolean
   baseURL: string
   browsers: ScreenshotBrowser[]
   viewports: ScreenshotViewport[]

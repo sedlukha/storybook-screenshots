@@ -89,6 +89,8 @@ export async function run(opts: RunOptions = {}): Promise<number> {
       snapshotDir: config.snapshotDir,
       rootDir: config.rootDir,
       colocate: config.colocate,
+      pathSegments: config.pathSegments,
+      nestedFolders: config.nestedFolders,
       baseURL: server.url,
       browsers: config.browsers,
       viewports: config.viewports,

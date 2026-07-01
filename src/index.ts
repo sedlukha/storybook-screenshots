@@ -9,6 +9,7 @@ export {
 } from "./affected.js"
 export { defineConfig } from "./config.js"
 export type {
+  PathSegment,
   ScreenshotBrowser,
   ScreenshotParameters,
   ScreenshotTheme,
