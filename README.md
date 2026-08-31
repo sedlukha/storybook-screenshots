@@ -71,6 +71,7 @@ storybook-screenshots --no-build      # skip buildCommand, use an existing build
 storybook-screenshots --update --changed         # capture only changed stories
 storybook-screenshots affected --out affected.json
 storybook-screenshots --update --only affected.json
+storybook-screenshots smoke --no-build   # load every story, capture nothing
 ```
 
 The CLI looks for the nearest `storybook-screenshots.config.mjs` (or `.js`),
@@ -86,9 +87,11 @@ walking up from the current directory.
 | `--only <v>`     | Restrict to an allowlist — an `affected` JSON file or a comma list of IDs.  |
 | `--fingerprint-dir <path>` | Override the config `fingerprintDir` — point the store at a CI-cached path. |
 
-Plus an `affected` subcommand that refreshes the fingerprint store and writes
-the changed-story allowlist without capturing:
+Plus two subcommands. `affected` refreshes the fingerprint store and writes the
+changed-story allowlist without capturing:
 `storybook-screenshots affected [--out file.json] [--fingerprint-dir <path>]`.
+And `smoke` loads every story without capturing — see
+[Smoke check](#smoke-check-no-pixels).
 
 ## Config
 
@@ -226,6 +229,47 @@ export const Notifications = {
   so stories already annotated for
   [Chromatic](https://www.chromatic.com/docs/delay/) work unchanged. The delay is
   applied *after* the play-function wait (animations are already disabled).
+
+## Smoke check (no pixels)
+
+```sh
+storybook build
+storybook-screenshots smoke --no-build
+```
+
+`smoke` loads every story from the built Storybook and captures nothing. It
+opens ONE page, then asks Storybook's own preview to import each story. A story
+whose module throws is reported with its id, its file, and the error:
+
+```
+✖ 2 of 147 stories failed to load from the built Storybook:
+
+  pages-topic--default  ./web/pages/topic/topic.stories.tsx
+    require is not defined
+```
+
+It fills a real gap. A Storybook build says nothing about a runtime error,
+because the error happens when the browser evaluates the file. A story test
+runner such as vitest renders from its own module graph, not from the built
+files. So a server-only import that reaches the browser bundle passes both
+steps. It then fails in the job that opens the build, minutes later.
+
+Nothing is rendered and no baseline is read or written. That makes the check
+safe to run on a developer machine, where a capture would redraw baselines with
+local fonts. It is fast for the same reason: one page, one module registry, so
+each story file is fetched once.
+
+| Flag           | Description                                                    |
+| -------------- | -------------------------------------------------------------- |
+| `--no-build`   | Skip `buildCommand` and use the existing `storybookDir`.       |
+| `--config`     | Path to the config file (otherwise the nearest one is used).   |
+| `--only <v>`   | Restrict to an allowlist — a JSON file or a comma list of IDs. |
+| `--timeout <ms>` | How long one story may take to load. Default `30000`.        |
+
+Two notes on what it covers. Every story in the index is loaded, `skipTags`
+included: a story that is not worth a screenshot must still not break the
+bundle. And a story that only throws while it renders is not caught here. Your
+story test runner already covers that half.
 
 ## CI
 
@@ -419,8 +463,11 @@ affected, the run captures nothing and exits cleanly.
 2. Serves the static build over a local HTTP server (no extra dependency).
 3. Reads `index.json` and creates one Playwright test per story.
 4. Loads each story's iframe, waits for Storybook's `sb-show-main` signal, then
-   `toHaveScreenshot`. A render failure surfaces the Storybook error and console
+   `toHaveScreenshot`. A render failure shows the Storybook error and console
    output instead of a blind timeout.
+
+The `smoke` subcommand stops after step 2. It opens one page and imports every
+story through the preview, so it never renders and never touches a baseline.
 
 ## License
 

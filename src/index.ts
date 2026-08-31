@@ -20,3 +20,5 @@ export type {
 } from "./config.js"
 export { affected, run } from "./run.js"
 export type { RunOptions } from "./run.js"
+export { reportSmoke, smoke } from "./smoke.js"
+export type { SmokeFailure, SmokeOptions, SmokeResult } from "./smoke.js"
