@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs"
 import { affected, run } from "../run.js"
+import { reportSmoke, smoke } from "../smoke.js"
 
 const argv = process.argv.slice(2)
 
@@ -48,6 +49,21 @@ if (argv[0] === "affected") {
       )
       process.exit(0)
     })
+    .catch((error: unknown) => {
+      console.error(error)
+      process.exit(1)
+    })
+} else if (argv[0] === "smoke") {
+  // `smoke` loads every story from the built files and captures nothing. It
+  // catches a story that builds fine and throws in the browser.
+  const timeout = flagValue("--timeout")
+  smoke({
+    configPath,
+    only: resolveOnly(flagValue("--only")),
+    skipBuild: argv.includes("--no-build"),
+    timeout: timeout ? Number(timeout) : undefined,
+  })
+    .then((result) => process.exit(reportSmoke(result)))
     .catch((error: unknown) => {
       console.error(error)
       process.exit(1)
