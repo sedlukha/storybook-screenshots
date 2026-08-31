@@ -233,12 +233,13 @@ async function loadEveryStory(args: {
 
 /** Print the result the way the CLI reports it, and answer with an exit code. */
 export function reportSmoke(result: SmokeResult): number {
+  const counted = `${result.total} ${result.total === 1 ? "story" : "stories"}`
   if (result.failures.length === 0) {
-    console.log(`✔ ${result.total} stories loaded from the built Storybook.`)
+    console.log(`✔ ${counted} loaded from the built Storybook.`)
     return 0
   }
   console.error(
-    `✖ ${result.failures.length} of ${result.total} stories failed to load from the built Storybook:\n`
+    `✖ ${result.failures.length} of ${counted} failed to load from the built Storybook:\n`
   )
   for (const failure of result.failures) {
     const where = failure.importPath ? `  ${failure.importPath}` : ""
