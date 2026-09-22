@@ -128,6 +128,18 @@ async function waitForPlayFinished(page: Page) {
     })
 }
 
+// Make the viewport as tall as the page, so a plain capture holds all of it.
+// The width stays, so text wraps the same way. A `vh` length grows with it.
+async function growToPageHeight(page: Page) {
+  const size = page.viewportSize()
+  const height = await page.evaluate(
+    () => document.documentElement.scrollHeight
+  )
+  if (size && height > size.height) {
+    await page.setViewportSize({ height, width: size.width })
+  }
+}
+
 interface StoryScreenshotParams {
   /** Pause before capturing (ms). */
   delay: number
@@ -235,8 +247,17 @@ test.describe("storybook stories", () => {
       // into `-` — flattening the nested layout into one file at the repo root.
       // An array is joined verbatim, so the `__stories__/…/__screenshots__/…`
       // folders survive.
+      const fullPage = params.fullPage ?? options.fullPage
+      // A full-page capture in Chromium turns touch emulation off for good.
+      // The page then matches `any-pointer: fine` and `hover: hover`. So on a
+      // touch viewport, grow the viewport to the page height and take a plain
+      // capture instead.
+      const growViewport = fullPage && testInfo.project.use.hasTouch === true
+      if (growViewport) {
+        await growToPageHeight(page)
+      }
       await expect(page).toHaveScreenshot(snapshotName.split("/"), {
-        fullPage: params.fullPage ?? options.fullPage,
+        fullPage: fullPage && !growViewport,
         ...(params.mask.length > 0
           ? { mask: params.mask.map((selector) => page.locator(selector)) }
           : {}),

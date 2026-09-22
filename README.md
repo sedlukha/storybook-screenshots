@@ -152,6 +152,12 @@ by every browser and theme. With `scale: "css"` the captured PNG stays at 1 px
 per CSS pixel, so a higher `deviceScaleFactor` changes what the page *renders*
 (media queries, image sources) while keeping baselines OS-independent.
 
+Touch changes what the page matches too. With `hasTouch`, the page matches
+`any-pointer: coarse` and `hover: none`, like a real phone. A full-page capture
+in Chromium turns touch emulation off. So on a touch viewport a tall story is
+captured another way. The viewport grows to the page height, and a plain
+capture follows. The width stays, but a `vh` length grows with the viewport.
+
 ## Themes
 
 Each theme maps to Storybook globals applied through the preview iframe, so it

@@ -58,8 +58,10 @@ const projects = options.browsers.flatMap((browser) =>
           ...(viewport.isMobile !== undefined
             ? { isMobile: viewport.isMobile }
             : {}),
-          ...(viewport.hasTouch !== undefined
-            ? { hasTouch: viewport.hasTouch }
+          // Touch follows `isMobile`, as the docs say. Playwright does not do
+          // this itself: without `hasTouch` a mobile page still reports a mouse.
+          ...((viewport.hasTouch ?? viewport.isMobile) !== undefined
+            ? { hasTouch: viewport.hasTouch ?? viewport.isMobile }
             : {}),
         },
         metadata: {
