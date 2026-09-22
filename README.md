@@ -157,6 +157,8 @@ Touch changes what the page matches too. With `hasTouch`, the page matches
 in Chromium turns touch emulation off. So on a touch viewport a tall story is
 captured another way. The viewport grows to the page height, and a plain
 capture follows. The width stays, but a `vh` length grows with the viewport.
+A page wider than the viewport keeps the full-page capture, so its right side
+stays in the picture. Such a page matches a mouse again.
 
 ## Themes
 

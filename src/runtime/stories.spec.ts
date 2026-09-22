@@ -130,14 +130,21 @@ async function waitForPlayFinished(page: Page) {
 
 // Make the viewport as tall as the page, so a plain capture holds all of it.
 // The width stays, so text wraps the same way. A `vh` length grows with it.
-async function growToPageHeight(page: Page) {
+// A page wider than the viewport is left alone, because a plain capture would
+// cut its right side. Returns true when the viewport now holds the page.
+async function growToPageHeight(page: Page): Promise<boolean> {
   const size = page.viewportSize()
-  const height = await page.evaluate(
-    () => document.documentElement.scrollHeight
-  )
-  if (size && height > size.height) {
-    await page.setViewportSize({ height, width: size.width })
+  const scroll = await page.evaluate(() => ({
+    height: document.documentElement.scrollHeight,
+    width: document.documentElement.scrollWidth,
+  }))
+  if (!size || scroll.width > size.width) {
+    return false
   }
+  if (scroll.height > size.height) {
+    await page.setViewportSize({ height: scroll.height, width: size.width })
+  }
+  return true
 }
 
 interface StoryScreenshotParams {
@@ -251,13 +258,14 @@ test.describe("storybook stories", () => {
       // A full-page capture in Chromium turns touch emulation off for good.
       // The page then matches `any-pointer: fine` and `hover: hover`. So on a
       // touch viewport, grow the viewport to the page height and take a plain
-      // capture instead.
-      const growViewport = fullPage && testInfo.project.use.hasTouch === true
-      if (growViewport) {
-        await growToPageHeight(page)
-      }
+      // capture instead. A page wider than the viewport keeps the full-page
+      // capture.
+      const grown =
+        fullPage &&
+        testInfo.project.use.hasTouch === true &&
+        (await growToPageHeight(page))
       await expect(page).toHaveScreenshot(snapshotName.split("/"), {
-        fullPage: fullPage && !growViewport,
+        fullPage: fullPage && !grown,
         ...(params.mask.length > 0
           ? { mask: params.mask.map((selector) => page.locator(selector)) }
           : {}),
