@@ -109,6 +109,7 @@ And `smoke` loads every story without capturing — see
 | `skipTags`          | `string[]`                             | `["!screenshot"]`                            | Skip stories carrying any of these Storybook tags.                       |
 | `fullPage`          | `boolean`                              | `true`                                       | Capture the full scrollable page.                                        |
 | `maxDiffPixelRatio` | `number`                               | `0.01`                                       | Allowed differing-pixel ratio before a story fails.                      |
+| `threshold`         | `number`                               | Playwright default (`0.2`)                   | How far apart two colours may be and still count as the same pixel (see [Colour threshold](#colour-threshold)). |
 | `failFast`          | `boolean`                              | `true`                                       | Stop the whole run on the first failing story.                           |
 | `retries`           | `number`                               | `2`                                          | Retry count (applied on CI).                                             |
 | `workers`           | `number \| string`                     | Playwright default (½ cores)                 | Parallel workers; a count or a percentage string like `"100%"`.          |
@@ -223,6 +224,7 @@ export const Notifications = {
       mask: ["[data-testid=avatar]", ".timestamp"], // hide dynamic content
       fullPage: false,                  // override the global fullPage
       maxDiffPixelRatio: 0.02,          // looser threshold for this story
+      threshold: 0.1,                   // looser colour threshold for this story
       viewports: ["mobile"],            // capture only in these viewports
     } satisfies ScreenshotParameters,
   },
@@ -231,12 +233,43 @@ export const Notifications = {
 
 - **`mask`** — CSS selectors painted over before the screenshot; the go-to for
   app stories with timestamps, avatars, or other unavoidable churn.
-- **`fullPage` / `maxDiffPixelRatio`** — per-story overrides of the global config.
+- **`fullPage` / `maxDiffPixelRatio` / `threshold`** — per-story overrides of the global config.
 - **`viewports`** — restrict the story to the listed viewport names.
 - **`delay`** — pause before capture; `chromatic.delay` is honored as a fallback,
   so stories already annotated for
   [Chromatic](https://www.chromatic.com/docs/delay/) work unchanged. The delay is
   applied *after* the play-function wait (animations are already disabled).
+
+## Colour threshold
+
+Two numbers decide whether a capture matches its baseline:
+
+- **`threshold`** — how far apart two colours may be and still count as the
+  same pixel. Playwright measures the distance in the YIQ colour space.
+- **`maxDiffPixelRatio`** — how many differing pixels a story may have.
+
+Playwright's default `threshold` is `0.2`. At that value two close light colours
+count as the same pixel. So `maxDiffPixelRatio: 0` alone does not make the
+compare exact. Measured on Playwright 1.60, a white baseline against a page of
+another colour, with `maxDiffPixelRatio: 0`:
+
+| Page      | `threshold` | Result                          |
+| --------- | ----------- | ------------------------------- |
+| `#fafafa` | default     | passes                          |
+| `#fafafa` | `0.01`      | fails, every pixel differs      |
+| `#fdfdfd` | `0.01`      | passes                          |
+| `#ffffff` | `0`         | passes                          |
+
+The same compare runs in `--update` mode. So with the default, a change of a
+light background keeps the old baseline, and the file in git goes stale. Set a
+lower `threshold` when such changes must be caught:
+
+```js
+export default defineConfig({
+  maxDiffPixelRatio: 0,
+  threshold: 0, // every changed colour counts
+})
+```
 
 ## Smoke check (no pixels)
 

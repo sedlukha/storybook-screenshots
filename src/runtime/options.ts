@@ -22,6 +22,8 @@ export interface RuntimeOptions {
   skipTags: string[]
   fullPage: boolean
   maxDiffPixelRatio: number
+  /** Colour distance that still counts as the same pixel. `null` = Playwright's. */
+  threshold: number | null
   failFast: boolean
   retries: number
   workers: number | string | null

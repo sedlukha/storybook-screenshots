@@ -105,6 +105,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
       skipTags: config.skipTags,
       fullPage: config.fullPage,
       maxDiffPixelRatio: config.maxDiffPixelRatio,
+      threshold: config.threshold,
       failFast: config.failFast,
       retries: config.retries,
       workers: config.workers,
@@ -188,7 +189,7 @@ function runPlaywright(
   if (update) {
     // `changed`, not `all`: `all` compares baselines byte-for-byte and rewrites
     // on any difference, so non-visual PNG-encoding drift churns baselines every
-    // run. `changed` compares pixels (within maxDiffPixelRatio) and only rewrites
+    // run. `changed` compares pixels (within maxDiffPixelRatio and threshold) and only rewrites
     // real changes — while still creating missing baselines and passing on write.
     args.push("--update-snapshots=changed")
   }

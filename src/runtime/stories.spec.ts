@@ -156,6 +156,8 @@ interface StoryScreenshotParams {
   fullPage?: boolean
   /** Per-story override of `maxDiffPixelRatio`. */
   maxDiffPixelRatio?: number
+  /** Per-story override of `threshold`. */
+  threshold?: number
   /** Restrict this story to these viewport names. */
   viewports?: string[]
 }
@@ -180,6 +182,7 @@ async function readScreenshotParams(
                   mask?: string[]
                   fullPage?: boolean
                   maxDiffPixelRatio?: number
+                  threshold?: number
                   viewports?: string[]
                 }
                 chromatic?: { delay?: number }
@@ -199,6 +202,8 @@ async function readScreenshotParams(
           typeof shot.maxDiffPixelRatio === "number"
             ? shot.maxDiffPixelRatio
             : undefined,
+        threshold:
+          typeof shot.threshold === "number" ? shot.threshold : undefined,
         viewports: Array.isArray(shot.viewports) ? shot.viewports : undefined,
       } satisfies StoryScreenshotParams
     }, storyId)
@@ -271,6 +276,9 @@ test.describe("storybook stories", () => {
           : {}),
         ...(params.maxDiffPixelRatio !== undefined
           ? { maxDiffPixelRatio: params.maxDiffPixelRatio }
+          : {}),
+        ...(params.threshold !== undefined
+          ? { threshold: params.threshold }
           : {}),
       })
     })
