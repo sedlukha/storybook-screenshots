@@ -95,6 +95,8 @@ export default defineConfig({
       animations: "disabled",
       caret: "hide",
       maxDiffPixelRatio: options.maxDiffPixelRatio,
+      // Set only when the config asks, so Playwright keeps its own default.
+      ...(options.threshold !== null ? { threshold: options.threshold } : {}),
       scale: "css",
     },
   },

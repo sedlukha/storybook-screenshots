@@ -69,6 +69,8 @@ export interface ScreenshotParameters {
   fullPage?: boolean
   /** Override `maxDiffPixelRatio` for this story. */
   maxDiffPixelRatio?: number
+  /** Override `threshold` for this story. */
+  threshold?: number
   /** Capture this story only in these viewport names. */
   viewports?: string[]
 }
@@ -116,6 +118,14 @@ export interface StorybookScreenshotsConfig {
   fullPage?: boolean
   /** Allowed differing-pixel ratio before a story fails. Default: `0.01`. */
   maxDiffPixelRatio?: number
+  /**
+   * How far apart two colours may be and still count as the same pixel, from
+   * `0` (exact) to `1`. Playwright compares in the YIQ colour space. Its own
+   * default of `0.2` treats two close light colours as equal, so a change like
+   * `#fafafa` → `#ffffff` passes, and `--update` keeps the old baseline.
+   * Lower it to catch such changes. Default: Playwright's own (`0.2`).
+   */
+  threshold?: number
   /** Stop the whole run on the first failing story. Default: `true`. */
   failFast?: boolean
   /** Retry count (applied on CI). Default: `2`. */
@@ -175,6 +185,8 @@ export interface ResolvedConfig {
   skipTags: string[]
   fullPage: boolean
   maxDiffPixelRatio: number
+  /** `null` leaves Playwright's own default in place. */
+  threshold: number | null
   failFast: boolean
   retries: number
   workers: number | string | null
@@ -245,6 +257,7 @@ export function resolveConfig(
     skipTags: config.skipTags ?? ["!screenshot"],
     fullPage: config.fullPage ?? true,
     maxDiffPixelRatio: config.maxDiffPixelRatio ?? 0.01,
+    threshold: config.threshold ?? null,
     failFast: config.failFast ?? true,
     retries: config.retries ?? 2,
     workers: config.workers ?? null,
