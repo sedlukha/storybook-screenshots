@@ -106,6 +106,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
       fullPage: config.fullPage,
       maxDiffPixelRatio: config.maxDiffPixelRatio,
       threshold: config.threshold,
+      playTimeout: config.playTimeout,
       failFast: config.failFast,
       retries: config.retries,
       workers: config.workers,

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { join, posix } from "node:path"
-import { expect, type Page, test } from "@playwright/test"
+import { errors, expect, type Page, test } from "@playwright/test"
 import type { ScreenshotTheme } from "../config.js"
 import { readRuntimeOptions } from "./options.js"
 
@@ -100,11 +100,11 @@ const PLAY_DONE_PHASES = [
 
 // Wait for Storybook's play function to finish before capturing, so interactive
 // stories (a play opening a dialog, a hover revealing a tooltip) are shot in
-// their settled state — not the initial pre-interaction render. Best-effort: if
-// the render never reports a terminal phase, capture anyway rather than fail.
-async function waitForPlayFinished(page: Page) {
-  await page
-    .waitForFunction(
+// their settled state. A play still running at `timeout` fails the story, and
+// so does a play that threw: either capture would write a broken baseline.
+async function waitForPlayFinished(page: Page, timeout: number) {
+  try {
+    await page.waitForFunction(
       (donePhases: string[]) => {
         const preview = (
           window as unknown as {
@@ -121,11 +121,67 @@ async function waitForPlayFinished(page: Page) {
         return render.phase === undefined || donePhases.includes(render.phase)
       },
       PLAY_DONE_PHASES,
-      { timeout: 15_000 }
+      { timeout }
     )
-    .catch(() => {
-      // Captured anyway — a story that never settles still yields a baseline.
-    })
+  } catch (error) {
+    // Any other error, such as a page closed by a failed neighbour, is not slowness.
+    if (!(error instanceof errors.TimeoutError)) {
+      throw error
+    }
+    const { phase } = await readPlayEnd(page)
+    throw new Error(
+      `The play function did not finish in ${timeout} ms (render phase: ${phase}). ` +
+        "The story was not captured. Raise the limit for this story with " +
+        "`parameters.screenshot.playTimeout`, or for all stories with " +
+        "`playTimeout` in the config file."
+    )
+  }
+  const end = await readPlayEnd(page)
+  if (end.playError !== null) {
+    throw new Error(
+      `The play function failed: ${end.playError}\nThe story was not captured.`
+    )
+  }
+}
+
+/** The page global that holds the message of a play function that threw. */
+const PLAY_ERROR_KEY = "__storybookScreenshotsPlayError__"
+
+// A play that threw can still end in `finished`: with
+// `throwPlayFunctionExceptions: false` Storybook only logs it. Its channel event
+// is the one sure signal, so this runs in the page before Storybook does.
+function watchPlayErrors(key: string) {
+  type Channel = {
+    on?: (event: string, listener: (error?: { message?: string }) => void) => void
+  }
+  let channel: Channel | undefined
+  // Storybook sets this global with a plain assignment, so the setter sees it.
+  Object.defineProperty(window, "__STORYBOOK_ADDONS_CHANNEL__", {
+    configurable: true,
+    get: () => channel,
+    set: (value: Channel) => {
+      channel = value
+      value?.on?.("playFunctionThrewException", (error) => {
+        Object.assign(window, { [key]: error?.message ?? "no message" })
+      })
+    },
+  })
+}
+
+// The render phase, and the message of a play that threw, as the page has them.
+async function readPlayEnd(page: Page) {
+  return await page
+    .evaluate((key) => {
+      const win = window as unknown as Record<string, unknown> & {
+        __STORYBOOK_PREVIEW__?: { currentRender?: { phase?: string } }
+      }
+      const playError = win[key]
+      return {
+        phase: win.__STORYBOOK_PREVIEW__?.currentRender?.phase ?? "none",
+        playError: typeof playError === "string" ? playError : null,
+      }
+    }, PLAY_ERROR_KEY)
+    .catch(() => ({ phase: "unknown", playError: null }))
 }
 
 // Make the viewport as tall as the page, so a plain capture holds all of it.
@@ -160,6 +216,8 @@ interface StoryScreenshotParams {
   threshold?: number
   /** Restrict this story to these viewport names. */
   viewports?: string[]
+  /** Per-story override of `playTimeout`. */
+  playTimeout?: number
 }
 
 const DEFAULT_PARAMS: StoryScreenshotParams = { delay: 0, mask: [] }
@@ -184,6 +242,7 @@ async function readScreenshotParams(
                   maxDiffPixelRatio?: number
                   threshold?: number
                   viewports?: string[]
+                  playTimeout?: number
                 }
                 chromatic?: { delay?: number }
               }
@@ -205,6 +264,8 @@ async function readScreenshotParams(
         threshold:
           typeof shot.threshold === "number" ? shot.threshold : undefined,
         viewports: Array.isArray(shot.viewports) ? shot.viewports : undefined,
+        playTimeout:
+          typeof shot.playTimeout === "number" ? shot.playTimeout : undefined,
       } satisfies StoryScreenshotParams
     }, storyId)
     .catch(() => DEFAULT_PARAMS)
@@ -231,12 +292,14 @@ test.describe("storybook stories", () => {
         captured.errors.push(`[pageerror] ${error.stack ?? error.message}`)
       )
 
+      await page.addInitScript(watchPlayErrors, PLAY_ERROR_KEY)
       await page.goto(
         `/iframe.html?id=${story.id}&viewMode=story${globalsParam(theme)}`,
         { waitUntil: "domcontentloaded" }
       )
       await waitForStoryReady(page, captured)
-      await waitForPlayFinished(page)
+      // Read before the play wait: the wait takes its length from here. The
+      // read only finds the story. It does not touch a running play.
       const params = await readScreenshotParams(page, story.id)
       // Per-story viewport allowlist: skip this story in unlisted viewports.
       test.skip(
@@ -244,6 +307,10 @@ test.describe("storybook stories", () => {
           !params.viewports.includes(meta.viewportName),
         `story limited to viewports: ${params.viewports?.join(", ")}`
       )
+      const playTimeout = params.playTimeout ?? options.playTimeout
+      // The play wait has its own limit, so the test limit must not end it early.
+      testInfo.setTimeout(testInfo.timeout + playTimeout)
+      await waitForPlayFinished(page, playTimeout)
       if (params.delay > 0) {
         await page.waitForTimeout(params.delay)
       }
