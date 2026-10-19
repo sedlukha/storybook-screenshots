@@ -24,6 +24,8 @@ export interface RuntimeOptions {
   maxDiffPixelRatio: number
   /** Colour distance that still counts as the same pixel. `null` = Playwright's. */
   threshold: number | null
+  /** How long a play function may run (ms) before the story fails. */
+  playTimeout: number
   failFast: boolean
   retries: number
   workers: number | string | null

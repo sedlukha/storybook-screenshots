@@ -110,6 +110,7 @@ And `smoke` loads every story without capturing — see
 | `fullPage`          | `boolean`                              | `true`                                       | Capture the full scrollable page.                                        |
 | `maxDiffPixelRatio` | `number`                               | `0.01`                                       | Allowed differing-pixel ratio before a story fails.                      |
 | `threshold`         | `number`                               | Playwright default (`0.2`)                   | How far apart two colours may be and still count as the same pixel (see [Colour threshold](#colour-threshold)). |
+| `playTimeout`       | `number`                               | `15000`                                      | How long a play function may run (ms). A story still playing then fails, and no baseline is written (see [Interactive stories](#interactive-stories)). |
 | `failFast`          | `boolean`                              | `true`                                       | Stop the whole run on the first failing story.                           |
 | `retries`           | `number`                               | `2`                                          | Retry count (applied on CI).                                             |
 | `workers`           | `number \| string`                     | Playwright default (½ cores)                 | Parallel workers; a count or a percentage string like `"100%"`.          |
@@ -206,8 +207,19 @@ stays at its git-ignored, CI-cached path (see
 
 Stories with a play function (opening a dialog, hovering to reveal a tooltip) are
 captured in their **settled, post-interaction state**: the runner waits for the
-play function to finish before screenshotting. No per-story config needed. If a
-story never settles it is captured anyway rather than failing the run.
+play function to finish before screenshotting. No per-story config needed.
+
+The wait has a limit: `playTimeout`, 15 seconds by default. A story whose play
+is still running then **fails**, and no baseline is written. A capture at that
+moment would show a half-done state, and in `--update` mode it would replace a
+good baseline. A slow machine makes this worse, so CI meets it first.
+
+A play that is slow on purpose (it draws many canvases, or reads big files) sets
+its own limit with `parameters.screenshot.playTimeout`. The test timeout grows
+by the same amount, so the test limit never ends the play wait early.
+
+A play function that throws fails the story too, with the error Storybook shows.
+Its capture would only show that error, or a half-done state.
 
 ## Per-story options
 
@@ -226,6 +238,7 @@ export const Notifications = {
       maxDiffPixelRatio: 0.02,          // looser threshold for this story
       threshold: 0.1,                   // looser colour threshold for this story
       viewports: ["mobile"],            // capture only in these viewports
+      playTimeout: 60_000,              // a slow play function may run this long (ms)
     } satisfies ScreenshotParameters,
   },
 }
@@ -235,6 +248,8 @@ export const Notifications = {
   app stories with timestamps, avatars, or other unavoidable churn.
 - **`fullPage` / `maxDiffPixelRatio` / `threshold`** — per-story overrides of the global config.
 - **`viewports`** — restrict the story to the listed viewport names.
+- **`playTimeout`** — how long this story's play function may run before the
+  story fails (see [Interactive stories](#interactive-stories)).
 - **`delay`** — pause before capture; `chromatic.delay` is honored as a fallback,
   so stories already annotated for
   [Chromatic](https://www.chromatic.com/docs/delay/) work unchanged. The delay is
@@ -503,9 +518,9 @@ affected, the run captures nothing and exits cleanly.
 1. Builds Storybook (`buildCommand`) or uses an existing `storybookDir`.
 2. Serves the static build over a local HTTP server (no extra dependency).
 3. Reads `index.json` and creates one Playwright test per story.
-4. Loads each story's iframe, waits for Storybook's `sb-show-main` signal, then
-   `toHaveScreenshot`. A render failure shows the Storybook error and console
-   output instead of a blind timeout.
+4. Loads each story's iframe, waits for Storybook's `sb-show-main` signal and
+   for the play function, then `toHaveScreenshot`. A render failure shows the
+   Storybook error and console output instead of a blind timeout.
 
 The `smoke` subcommand stops after step 2. It opens one page and imports every
 story through the preview, so it never renders and never touches a baseline.

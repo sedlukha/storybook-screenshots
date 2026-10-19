@@ -73,6 +73,8 @@ export interface ScreenshotParameters {
   threshold?: number
   /** Capture this story only in these viewport names. */
   viewports?: string[]
+  /** Override `playTimeout` for this story, for a play function that is slow on purpose. */
+  playTimeout?: number
 }
 
 export interface StorybookScreenshotsConfig {
@@ -126,6 +128,12 @@ export interface StorybookScreenshotsConfig {
    * Lower it to catch such changes. Default: Playwright's own (`0.2`).
    */
   threshold?: number
+  /**
+   * How long a play function may run, in ms. A story whose play is still
+   * running then fails, and no baseline is written: its picture would show a
+   * half-done state. The test timeout grows by the same amount. Default: `15000`.
+   */
+  playTimeout?: number
   /** Stop the whole run on the first failing story. Default: `true`. */
   failFast?: boolean
   /** Retry count (applied on CI). Default: `2`. */
@@ -187,6 +195,7 @@ export interface ResolvedConfig {
   maxDiffPixelRatio: number
   /** `null` leaves Playwright's own default in place. */
   threshold: number | null
+  playTimeout: number
   failFast: boolean
   retries: number
   workers: number | string | null
@@ -258,6 +267,7 @@ export function resolveConfig(
     fullPage: config.fullPage ?? true,
     maxDiffPixelRatio: config.maxDiffPixelRatio ?? 0.01,
     threshold: config.threshold ?? null,
+    playTimeout: config.playTimeout ?? 15_000,
     failFast: config.failFast ?? true,
     retries: config.retries ?? 2,
     workers: config.workers ?? null,
