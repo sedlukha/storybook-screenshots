@@ -111,7 +111,7 @@ And `smoke` loads every story without capturing — see
 | `maxDiffPixelRatio` | `number`                               | `0.01`                                       | Allowed differing-pixel ratio before a story fails.                      |
 | `threshold`         | `number`                               | Playwright default (`0.2`)                   | How far apart two colours may be and still count as the same pixel (see [Colour threshold](#colour-threshold)). |
 | `playTimeout`       | `number`                               | `15000`                                      | How long a play function may run (ms). A story still playing then fails, and no baseline is written (see [Interactive stories](#interactive-stories)). |
-| `reusePage`         | `boolean`                              | `false`                                      | Keep one page for each worker and switch stories inside it, instead of a fresh load for each story. Check your baselines once after you turn it on. |
+| `reusePage`         | `boolean`                              | `false`                                      | Keep one page for each worker and switch stories inside it, instead of a fresh load for each story (see [Reusing one page](#reusing-one-page)). |
 | `failFast`          | `boolean`                              | `true`                                       | Stop the whole run on the first failing story.                           |
 | `retries`           | `number`                               | `2`                                          | Retry count (applied on CI).                                             |
 | `workers`           | `number \| string`                     | Playwright default (½ cores)                 | Parallel workers; a count or a percentage string like `"100%"`.          |
@@ -255,6 +255,29 @@ export const Notifications = {
   so stories already annotated for
   [Chromatic](https://www.chromatic.com/docs/delay/) work unchanged. The delay is
   applied *after* the play-function wait (animations are already disabled).
+- **`freshPage`** — load this story on a fresh page when `reusePage` is on (see
+  [Reusing one page](#reusing-one-page)).
+
+## Reusing one page
+
+Each capture loads the Storybook preview from zero, and the load is most of
+the cost. With `reusePage: true`, each worker keeps one page and switches
+stories inside it.
+
+Before a switch, the page puts back the viewport, the scroll and the play error
+mark. After the play, it waits until the story has stopped drawing. A
+decorator can ask for new globals after the first render, so the story can
+draw twice. A switch that fails falls back to a fresh load.
+
+Some stories still need a fresh page:
+
+- **A story with `parameters.pseudo`** always gets one. The pseudo-states addon
+  rewrites the page CSS, and the result depends on the stories shown before.
+- **A story that leaves state behind**, such as a global listener, can set
+  `parameters.screenshot.freshPage: true`.
+
+Capture your baselines once in the default mode, then run with `reusePage` and
+compare. A canvas story can drift even between two default runs.
 
 ## Colour threshold
 

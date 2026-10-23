@@ -75,6 +75,11 @@ export interface ScreenshotParameters {
   viewports?: string[]
   /** Override `playTimeout` for this story, for a play function that is slow on purpose. */
   playTimeout?: number
+  /**
+   * Load this story on a fresh page when `reusePage` is on. A story that
+   * leaves state behind needs it. Stories with `parameters.pseudo` get it anyway.
+   */
+  freshPage?: boolean
 }
 
 export interface StorybookScreenshotsConfig {

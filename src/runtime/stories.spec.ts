@@ -316,52 +316,137 @@ const reuseTest = test.extend<object, { sharedPage: SharedPage }>({
   ],
 })
 
+/** The page global that numbers the render and globals events in order. */
+const SEQ_KEY = "__storybookScreenshotsSeq__"
+
+interface RenderSeq {
+  /** The number of the last `globalsUpdated` event. */
+  globals: number
+  next: number
+  /** The number of the last `storyRendered` event. */
+  rendered: number
+  /** The number of the last `updateGlobals` request. */
+  requested: number
+  /** The number given when the switch began. */
+  switched: number
+}
+
+/** How long a switched story may take to settle (ms). */
+const SETTLE_TIMEOUT = 10_000
+
+// A switched story can draw twice. After its first render a decorator may
+// ask for new globals: the pseudo-states addon does so, because the globals
+// still hold the config of the last story. The story then renders again, and
+// the addon applies its classes in a timer after that. So the story counts as
+// drawn when a render came last, and a task and two frames brought no event.
+async function waitForSettled(page: Page) {
+  await page.evaluate(
+    async ({ seqKey, timeout }) => {
+      const seq = (window as unknown as Record<string, RenderSeq | undefined>)[
+        seqKey
+      ]
+      if (!seq) {
+        return
+      }
+      const drawn = () =>
+        seq.rendered > seq.switched &&
+        seq.rendered > seq.globals &&
+        seq.rendered > seq.requested
+      const pause = () =>
+        new Promise<void>((resolve) =>
+          setTimeout(() =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+          )
+        )
+      const deadline = performance.now() + timeout
+      for (;;) {
+        const mark = seq.next
+        const ready = drawn()
+        await pause()
+        if (ready && seq.next === mark) {
+          return
+        }
+        if (performance.now() > deadline) {
+          throw new Error(`The story did not settle in ${timeout} ms.`)
+        }
+      }
+    },
+    { seqKey: SEQ_KEY, timeout: SETTLE_TIMEOUT }
+  )
+}
+
+// True when a story must have a fresh page even in `reusePage` mode. The
+// pseudo-states addon rewrites the page CSS, and the result depends on the
+// stories the page showed before. A story can also ask with `freshPage`.
+async function needsFreshPage(page: Page, storyId: string): Promise<boolean> {
+  return await page
+    .evaluate(async (id) => {
+      const preview = (
+        window as unknown as {
+          __STORYBOOK_PREVIEW__?: {
+            loadStory?: (opts: { storyId: string }) => Promise<{
+              parameters?: {
+                pseudo?: unknown
+                screenshot?: { freshPage?: boolean }
+              }
+            }>
+          }
+        }
+      ).__STORYBOOK_PREVIEW__
+      const params = (await preview?.loadStory?.({ storyId: id }))?.parameters
+      return params?.pseudo !== undefined || params?.screenshot?.freshPage === true
+    }, storyId)
+    .catch(() => true)
+}
+
 // Show another story in a page that already holds the preview. Resolves false
 // when Storybook does not take the switch, and the caller loads the page then.
-async function switchStory(
-  page: Page,
-  storyId: string,
-  viewport: { height: number; width: number } | null
-): Promise<boolean> {
+async function switchStory(page: Page, storyId: string): Promise<boolean> {
   try {
-    // The last capture may have grown the viewport to its page height.
-    if (viewport) {
-      await page.setViewportSize(viewport)
-    }
     await page.evaluate(
-      ({ id, key }) => {
-        type Globals = Record<string, unknown>
+      ({ id, key, seqKey }) => {
         const win = window as unknown as Record<string, unknown> & {
           __STORYBOOK_ADDONS_CHANNEL__?: {
             emit: (event: string, data: unknown) => void
-          }
-          __STORYBOOK_PREVIEW__?: {
-            storyStoreValue?: {
-              userGlobals?: { get: () => Globals; initialGlobals?: Globals }
-            }
+            on: (event: string, listener: () => void) => void
           }
         }
         const channel = win.__STORYBOOK_ADDONS_CHANNEL__
+        if (!channel) {
+          throw new Error("no Storybook channel")
+        }
+        // Number the render and globals events once, for `waitForSettled`.
+        if (!win[seqKey]) {
+          const seq: RenderSeq = {
+            globals: 0,
+            next: 0,
+            rendered: 0,
+            requested: 0,
+            switched: 0,
+          }
+          win[seqKey] = seq
+          channel.on("updateGlobals", () => {
+            seq.next += 1
+            seq.requested = seq.next
+          })
+          channel.on("globalsUpdated", () => {
+            seq.next += 1
+            seq.globals = seq.next
+          })
+          channel.on("storyRendered", () => {
+            seq.next += 1
+            seq.rendered = seq.next
+          })
+        }
+        const seq = win[seqKey] as RenderSeq
+        seq.next += 1
+        seq.switched = seq.next
         // The play error of the last story must not fail this one.
         delete win[key]
         window.scrollTo(0, 0)
-        // A story can leave a global behind: the pseudo-states addon keeps its
-        // config there. A fresh page starts from the first globals, so put
-        // every global back to them before the next story renders.
-        const store = win.__STORYBOOK_PREVIEW__?.storyStoreValue?.userGlobals
-        if (store?.initialGlobals) {
-          const first = store.initialGlobals
-          const globals = Object.fromEntries(
-            Object.keys(store.get()).map((name) => [name, first[name]])
-          )
-          channel?.emit("updateGlobals", { globals })
-        }
-        channel?.emit("setCurrentStory", {
-          storyId: id,
-          viewMode: "story",
-        })
+        channel.emit("setCurrentStory", { storyId: id, viewMode: "story" })
       },
-      { id: storyId, key: PLAY_ERROR_KEY }
+      { id: storyId, key: PLAY_ERROR_KEY, seqKey: SEQ_KEY }
     )
     // The body class still shows the last story, so wait for the new render.
     await page.waitForFunction(
@@ -380,14 +465,16 @@ async function switchStory(
   }
 }
 
-// Capture one story. `open` brings the story onto the page. Resolves true when
+// Capture one story. `open` brings the story onto the page, and `settle` runs
+// after its play. Resolves true when
 // the capture took a full page on a touch viewport: Chromium then keeps touch
 // emulation off for that page.
 async function captureStory(
   page: Page,
   story: StoryEntry,
   testInfo: TestInfo,
-  open: (url: string) => Promise<void>
+  open: (url: string) => Promise<void>,
+  settle: () => Promise<void> = async () => undefined
 ): Promise<boolean> {
   const meta = testInfo.project.metadata as {
     theme?: ScreenshotTheme
@@ -424,6 +511,7 @@ async function captureStory(
     // The play wait has its own limit, so the test limit must not end it early.
     testInfo.setTimeout(testInfo.timeout + playTimeout)
     await waitForPlayFinished(page, playTimeout)
+    await settle()
     if (params.delay > 0) {
       await page.waitForTimeout(params.delay)
     }
@@ -471,19 +559,33 @@ test.describe("storybook stories", () => {
     if (options.reusePage) {
       reuseTest(story.id, async ({ sharedPage }, testInfo) => {
         const viewport = testInfo.project.use.viewport ?? null
+        let switched = false
         const touchOff = await captureStory(
           sharedPage.page,
           story,
           testInfo,
           async (url) => {
+            const { page } = sharedPage
+            // The last capture may have grown the viewport to its page height.
+            if (viewport) {
+              await page.setViewportSize(viewport)
+            }
             if (
               sharedPage.loaded &&
-              (await switchStory(sharedPage.page, story.id, viewport))
+              !(await needsFreshPage(page, story.id)) &&
+              (await switchStory(page, story.id))
             ) {
+              switched = true
               return
             }
-            await sharedPage.page.goto(url, { waitUntil: "domcontentloaded" })
+            await page.goto(url, { waitUntil: "domcontentloaded" })
             sharedPage.loaded = true
+          },
+          // A fresh load settles before it shows the story, so only a switch waits.
+          async () => {
+            if (switched) {
+              await waitForSettled(sharedPage.page)
+            }
           }
         )
         // Touch is gone from this page, so the next story needs a new one.
