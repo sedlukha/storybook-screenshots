@@ -248,7 +248,9 @@ export const Notifications = {
 - **`mask`** — CSS selectors painted over before the screenshot; the go-to for
   app stories with timestamps, avatars, or other unavoidable churn.
 - **`fullPage` / `maxDiffPixelRatio` / `threshold`** — per-story overrides of the global config.
-- **`viewports`** — restrict the story to the listed viewport names.
+- **`viewports`** — restrict the story to the listed viewport names. The tool
+  reads this parameter from the page, so a skipped viewport still loads the
+  story. A tag is cheaper, see below.
 - **`playTimeout`** — how long this story's play function may run before the
   story fails (see [Interactive stories](#interactive-stories)).
 - **`delay`** — pause before capture; `chromatic.delay` is honored as a fallback,
@@ -278,6 +280,21 @@ Some stories still need a fresh page:
 
 Capture your baselines once in the default mode, then run with `reusePage` and
 compare. A canvas story can drift even between two default runs.
+
+### Limit a story to a viewport with a tag
+
+A tag `viewport:<name>` limits the story to that viewport. Give several tags
+for several viewports. Tags sit in `index.json`, so the tool skips the other
+viewports before it loads the page.
+
+```tsx
+export const Default = meta.story({
+  tags: ["viewport:desktop"],
+  // …
+})
+```
+
+A story with no such tag falls back to `parameters.screenshot.viewports`.
 
 ## Colour threshold
 
