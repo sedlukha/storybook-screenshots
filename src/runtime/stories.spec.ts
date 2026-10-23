@@ -1,6 +1,14 @@
 import { readFileSync } from "node:fs"
 import { join, posix } from "node:path"
-import { errors, expect, type Page, test } from "@playwright/test"
+import {
+  type BrowserContext,
+  type ConsoleMessage,
+  errors,
+  expect,
+  type Page,
+  type TestInfo,
+  test,
+} from "@playwright/test"
 import type { ScreenshotTheme } from "../config.js"
 import { readRuntimeOptions } from "./options.js"
 
@@ -271,83 +279,329 @@ async function readScreenshotParams(
     .catch(() => DEFAULT_PARAMS)
 }
 
+/** The page a worker keeps open when `reusePage` is on. */
+interface SharedPage {
+  context: BrowserContext
+  page: Page
+  /** True once the page holds a Storybook preview. */
+  loaded: boolean
+}
+
+// One context and one page for each worker. A worker serves one project, so
+// the viewport and the theme stay the same for every story it captures. A
+// failed test ends its worker, so the next story starts on a fresh page.
+const reuseTest = test.extend<object, { sharedPage: SharedPage }>({
+  sharedPage: [
+    async ({ browser }, use, workerInfo) => {
+      const { baseURL, deviceScaleFactor, hasTouch, isMobile, userAgent, viewport } =
+        workerInfo.project.use
+      const context = await browser.newContext({
+        baseURL,
+        deviceScaleFactor,
+        hasTouch,
+        isMobile,
+        userAgent,
+        viewport,
+      })
+      await context.addInitScript(watchPlayErrors, PLAY_ERROR_KEY)
+      const shared: SharedPage = {
+        context,
+        loaded: false,
+        page: await context.newPage(),
+      }
+      await use(shared)
+      await context.close()
+    },
+    { scope: "worker" },
+  ],
+})
+
+/** The page global that numbers the render and globals events in order. */
+const SEQ_KEY = "__storybookScreenshotsSeq__"
+
+interface RenderSeq {
+  /** The number of the last `globalsUpdated` event. */
+  globals: number
+  next: number
+  /** The number of the last `storyRendered` event. */
+  rendered: number
+  /** The number of the last `updateGlobals` request. */
+  requested: number
+  /** The number given when the switch began. */
+  switched: number
+}
+
+/** How long a switched story may take to settle (ms). */
+const SETTLE_TIMEOUT = 10_000
+
+// A switched story can draw twice. After its first render a decorator may
+// ask for new globals: the pseudo-states addon does so, because the globals
+// still hold the config of the last story. The story then renders again, and
+// the addon applies its classes in a timer after that. So the story counts as
+// drawn when a render came last, and a task and two frames brought no event.
+async function waitForSettled(page: Page) {
+  await page.evaluate(
+    async ({ seqKey, timeout }) => {
+      const seq = (window as unknown as Record<string, RenderSeq | undefined>)[
+        seqKey
+      ]
+      if (!seq) {
+        return
+      }
+      const drawn = () =>
+        seq.rendered > seq.switched &&
+        seq.rendered > seq.globals &&
+        seq.rendered > seq.requested
+      const pause = () =>
+        new Promise<void>((resolve) =>
+          setTimeout(() =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+          )
+        )
+      const deadline = performance.now() + timeout
+      for (;;) {
+        const mark = seq.next
+        const ready = drawn()
+        await pause()
+        if (ready && seq.next === mark) {
+          return
+        }
+        if (performance.now() > deadline) {
+          throw new Error(`The story did not settle in ${timeout} ms.`)
+        }
+      }
+    },
+    { seqKey: SEQ_KEY, timeout: SETTLE_TIMEOUT }
+  )
+}
+
+// True when a story must have a fresh page even in `reusePage` mode. The
+// pseudo-states addon rewrites the page CSS, and the result depends on the
+// stories the page showed before. A story can also ask with `freshPage`.
+async function needsFreshPage(page: Page, storyId: string): Promise<boolean> {
+  return await page
+    .evaluate(async (id) => {
+      const preview = (
+        window as unknown as {
+          __STORYBOOK_PREVIEW__?: {
+            loadStory?: (opts: { storyId: string }) => Promise<{
+              parameters?: {
+                pseudo?: unknown
+                screenshot?: { freshPage?: boolean }
+              }
+            }>
+          }
+        }
+      ).__STORYBOOK_PREVIEW__
+      const params = (await preview?.loadStory?.({ storyId: id }))?.parameters
+      return params?.pseudo !== undefined || params?.screenshot?.freshPage === true
+    }, storyId)
+    .catch(() => true)
+}
+
+// Show another story in a page that already holds the preview. Resolves false
+// when Storybook does not take the switch, and the caller loads the page then.
+async function switchStory(page: Page, storyId: string): Promise<boolean> {
+  try {
+    await page.evaluate(
+      ({ id, key, seqKey }) => {
+        const win = window as unknown as Record<string, unknown> & {
+          __STORYBOOK_ADDONS_CHANNEL__?: {
+            emit: (event: string, data: unknown) => void
+            on: (event: string, listener: () => void) => void
+          }
+        }
+        const channel = win.__STORYBOOK_ADDONS_CHANNEL__
+        if (!channel) {
+          throw new Error("no Storybook channel")
+        }
+        // Number the render and globals events once, for `waitForSettled`.
+        if (!win[seqKey]) {
+          const seq: RenderSeq = {
+            globals: 0,
+            next: 0,
+            rendered: 0,
+            requested: 0,
+            switched: 0,
+          }
+          win[seqKey] = seq
+          channel.on("updateGlobals", () => {
+            seq.next += 1
+            seq.requested = seq.next
+          })
+          channel.on("globalsUpdated", () => {
+            seq.next += 1
+            seq.globals = seq.next
+          })
+          channel.on("storyRendered", () => {
+            seq.next += 1
+            seq.rendered = seq.next
+          })
+        }
+        const seq = win[seqKey] as RenderSeq
+        seq.next += 1
+        seq.switched = seq.next
+        // The play error of the last story must not fail this one.
+        delete win[key]
+        window.scrollTo(0, 0)
+        channel.emit("setCurrentStory", { storyId: id, viewMode: "story" })
+      },
+      { id: storyId, key: PLAY_ERROR_KEY, seqKey: SEQ_KEY }
+    )
+    // The body class still shows the last story, so wait for the new render.
+    await page.waitForFunction(
+      (id) =>
+        (
+          window as unknown as {
+            __STORYBOOK_PREVIEW__?: { currentRender?: { id?: string } }
+          }
+        ).__STORYBOOK_PREVIEW__?.currentRender?.id === id,
+      storyId,
+      { timeout: 10_000 }
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Capture one story. `open` brings the story onto the page, and `settle` runs
+// after its play. Resolves true when
+// the capture took a full page on a touch viewport: Chromium then keeps touch
+// emulation off for that page.
+async function captureStory(
+  page: Page,
+  story: StoryEntry,
+  testInfo: TestInfo,
+  open: (url: string) => Promise<void>,
+  settle: () => Promise<void> = async () => undefined
+): Promise<boolean> {
+  const meta = testInfo.project.metadata as {
+    theme?: ScreenshotTheme
+    snapshotFolder: string
+    snapshotSuffix: string
+    viewportName: string
+  }
+  const theme = meta.theme ?? null
+  const captured: Captured = { errors: [] }
+  const onConsole = (message: ConsoleMessage) => {
+    const type = message.type()
+    if (type === "error" || type === "warning") {
+      captured.errors.push(`[${type}] ${message.text()}`)
+    }
+  }
+  const onPageError = (error: Error) =>
+    captured.errors.push(`[pageerror] ${error.stack ?? error.message}`)
+  // A shared page outlives the test, so its listeners must go at the end.
+  page.on("console", onConsole)
+  page.on("pageerror", onPageError)
+  try {
+    await open(`/iframe.html?id=${story.id}&viewMode=story${globalsParam(theme)}`)
+    await waitForStoryReady(page, captured)
+    // Read before the play wait: the wait takes its length from here. The
+    // read only finds the story. It does not touch a running play.
+    const params = await readScreenshotParams(page, story.id)
+    // Per-story viewport allowlist: skip this story in unlisted viewports.
+    test.skip(
+      params.viewports !== undefined &&
+        !params.viewports.includes(meta.viewportName),
+      `story limited to viewports: ${params.viewports?.join(", ")}`
+    )
+    const playTimeout = params.playTimeout ?? options.playTimeout
+    // The play wait has its own limit, so the test limit must not end it early.
+    testInfo.setTimeout(testInfo.timeout + playTimeout)
+    await waitForPlayFinished(page, playTimeout)
+    await settle()
+    if (params.delay > 0) {
+      await page.waitForTimeout(params.delay)
+    }
+    // <folder>/<story>[-<theme>].png, optionally co-located under the story's
+    // own source directory (…/__screenshots__/…) instead of the snapshotDir.
+    const baseName = `${meta.snapshotFolder}/${story.id}${meta.snapshotSuffix}.png`
+    const snapshotName =
+      options.colocate && story.importPath
+        ? `${posix.dirname(story.importPath.replace(/^\.\//, ""))}/__screenshots__/${baseName}`
+        : baseName
+    // Pass the path as segments, not a joined string. Playwright runs
+    // `sanitizeForFilePath` on a string name, which turns every `/` (and `_`)
+    // into `-` — flattening the nested layout into one file at the repo root.
+    // An array is joined verbatim, so the `__stories__/…/__screenshots__/…`
+    // folders survive.
+    const fullPage = params.fullPage ?? options.fullPage
+    const touch = testInfo.project.use.hasTouch === true
+    // A full-page capture in Chromium turns touch emulation off for good.
+    // The page then matches `any-pointer: fine` and `hover: hover`. So on a
+    // touch viewport, grow the viewport to the page height and take a plain
+    // capture instead. A page wider than the viewport keeps the full-page
+    // capture.
+    const grown = fullPage && touch && (await growToPageHeight(page))
+    await expect(page).toHaveScreenshot(snapshotName.split("/"), {
+      fullPage: fullPage && !grown,
+      ...(params.mask.length > 0
+        ? { mask: params.mask.map((selector) => page.locator(selector)) }
+        : {}),
+      ...(params.maxDiffPixelRatio !== undefined
+        ? { maxDiffPixelRatio: params.maxDiffPixelRatio }
+        : {}),
+      ...(params.threshold !== undefined
+        ? { threshold: params.threshold }
+        : {}),
+    })
+    return fullPage && !grown && touch
+  } finally {
+    page.off("console", onConsole)
+    page.off("pageerror", onPageError)
+  }
+}
+
 test.describe("storybook stories", () => {
   for (const story of stories) {
-    test(story.id, async ({ page }, testInfo) => {
-      const meta = testInfo.project.metadata as {
-        theme?: ScreenshotTheme
-        snapshotFolder: string
-        snapshotSuffix: string
-        viewportName: string
-      }
-      const theme = meta.theme ?? null
-      const captured: Captured = { errors: [] }
-      page.on("console", (message) => {
-        const type = message.type()
-        if (type === "error" || type === "warning") {
-          captured.errors.push(`[${type}] ${message.text()}`)
+    if (options.reusePage) {
+      reuseTest(story.id, async ({ sharedPage }, testInfo) => {
+        const viewport = testInfo.project.use.viewport ?? null
+        let switched = false
+        const touchOff = await captureStory(
+          sharedPage.page,
+          story,
+          testInfo,
+          async (url) => {
+            const { page } = sharedPage
+            // The last capture may have grown the viewport to its page height.
+            if (viewport) {
+              await page.setViewportSize(viewport)
+            }
+            if (
+              sharedPage.loaded &&
+              !(await needsFreshPage(page, story.id)) &&
+              (await switchStory(page, story.id))
+            ) {
+              switched = true
+              return
+            }
+            await page.goto(url, { waitUntil: "domcontentloaded" })
+            sharedPage.loaded = true
+          },
+          // A fresh load settles before it shows the story, so only a switch waits.
+          async () => {
+            if (switched) {
+              await waitForSettled(sharedPage.page)
+            }
+          }
+        )
+        // Touch is gone from this page, so the next story needs a new one.
+        if (touchOff) {
+          await sharedPage.page.close()
+          sharedPage.page = await sharedPage.context.newPage()
+          sharedPage.loaded = false
         }
       })
-      page.on("pageerror", (error) =>
-        captured.errors.push(`[pageerror] ${error.stack ?? error.message}`)
-      )
-
-      await page.addInitScript(watchPlayErrors, PLAY_ERROR_KEY)
-      await page.goto(
-        `/iframe.html?id=${story.id}&viewMode=story${globalsParam(theme)}`,
-        { waitUntil: "domcontentloaded" }
-      )
-      await waitForStoryReady(page, captured)
-      // Read before the play wait: the wait takes its length from here. The
-      // read only finds the story. It does not touch a running play.
-      const params = await readScreenshotParams(page, story.id)
-      // Per-story viewport allowlist: skip this story in unlisted viewports.
-      test.skip(
-        params.viewports !== undefined &&
-          !params.viewports.includes(meta.viewportName),
-        `story limited to viewports: ${params.viewports?.join(", ")}`
-      )
-      const playTimeout = params.playTimeout ?? options.playTimeout
-      // The play wait has its own limit, so the test limit must not end it early.
-      testInfo.setTimeout(testInfo.timeout + playTimeout)
-      await waitForPlayFinished(page, playTimeout)
-      if (params.delay > 0) {
-        await page.waitForTimeout(params.delay)
-      }
-      // <folder>/<story>[-<theme>].png, optionally co-located under the story's
-      // own source directory (…/__screenshots__/…) instead of the snapshotDir.
-      const baseName = `${meta.snapshotFolder}/${story.id}${meta.snapshotSuffix}.png`
-      const snapshotName =
-        options.colocate && story.importPath
-          ? `${posix.dirname(story.importPath.replace(/^\.\//, ""))}/__screenshots__/${baseName}`
-          : baseName
-      // Pass the path as segments, not a joined string. Playwright runs
-      // `sanitizeForFilePath` on a string name, which turns every `/` (and `_`)
-      // into `-` — flattening the nested layout into one file at the repo root.
-      // An array is joined verbatim, so the `__stories__/…/__screenshots__/…`
-      // folders survive.
-      const fullPage = params.fullPage ?? options.fullPage
-      // A full-page capture in Chromium turns touch emulation off for good.
-      // The page then matches `any-pointer: fine` and `hover: hover`. So on a
-      // touch viewport, grow the viewport to the page height and take a plain
-      // capture instead. A page wider than the viewport keeps the full-page
-      // capture.
-      const grown =
-        fullPage &&
-        testInfo.project.use.hasTouch === true &&
-        (await growToPageHeight(page))
-      await expect(page).toHaveScreenshot(snapshotName.split("/"), {
-        fullPage: fullPage && !grown,
-        ...(params.mask.length > 0
-          ? { mask: params.mask.map((selector) => page.locator(selector)) }
-          : {}),
-        ...(params.maxDiffPixelRatio !== undefined
-          ? { maxDiffPixelRatio: params.maxDiffPixelRatio }
-          : {}),
-        ...(params.threshold !== undefined
-          ? { threshold: params.threshold }
-          : {}),
+    } else {
+      test(story.id, async ({ page }, testInfo) => {
+        await page.addInitScript(watchPlayErrors, PLAY_ERROR_KEY)
+        await captureStory(page, story, testInfo, async (url) => {
+          await page.goto(url, { waitUntil: "domcontentloaded" })
+        })
       })
-    })
+    }
   }
 })

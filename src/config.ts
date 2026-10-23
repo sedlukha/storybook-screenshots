@@ -75,6 +75,11 @@ export interface ScreenshotParameters {
   viewports?: string[]
   /** Override `playTimeout` for this story, for a play function that is slow on purpose. */
   playTimeout?: number
+  /**
+   * Load this story on a fresh page when `reusePage` is on. A story that
+   * leaves state behind needs it. Stories with `parameters.pseudo` get it anyway.
+   */
+  freshPage?: boolean
 }
 
 export interface StorybookScreenshotsConfig {
@@ -134,6 +139,13 @@ export interface StorybookScreenshotsConfig {
    * half-done state. The test timeout grows by the same amount. Default: `15000`.
    */
   playTimeout?: number
+  /**
+   * Keep one page open for each worker and switch stories inside it, instead
+   * of a fresh page load for each story. The load is most of the cost of a
+   * capture. A story that leaves state behind can draw differently, so check
+   * your baselines once after you turn it on. Default: `false`.
+   */
+  reusePage?: boolean
   /** Stop the whole run on the first failing story. Default: `true`. */
   failFast?: boolean
   /** Retry count (applied on CI). Default: `2`. */
@@ -196,6 +208,7 @@ export interface ResolvedConfig {
   /** `null` leaves Playwright's own default in place. */
   threshold: number | null
   playTimeout: number
+  reusePage: boolean
   failFast: boolean
   retries: number
   workers: number | string | null
@@ -268,6 +281,7 @@ export function resolveConfig(
     maxDiffPixelRatio: config.maxDiffPixelRatio ?? 0.01,
     threshold: config.threshold ?? null,
     playTimeout: config.playTimeout ?? 15_000,
+    reusePage: config.reusePage ?? false,
     failFast: config.failFast ?? true,
     retries: config.retries ?? 2,
     workers: config.workers ?? null,
