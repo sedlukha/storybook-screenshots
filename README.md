@@ -111,6 +111,7 @@ And `smoke` loads every story without capturing — see
 | `maxDiffPixelRatio` | `number`                               | `0.01`                                       | Allowed differing-pixel ratio before a story fails.                      |
 | `threshold`         | `number`                               | Playwright default (`0.2`)                   | How far apart two colours may be and still count as the same pixel (see [Colour threshold](#colour-threshold)). |
 | `playTimeout`       | `number`                               | `15000`                                      | How long a play function may run (ms). A story still playing then fails, and no baseline is written (see [Interactive stories](#interactive-stories)). |
+| `reusePage`         | `boolean`                              | `false`                                      | Keep one page for each worker and switch stories inside it, instead of a fresh load for each story. Check your baselines once after you turn it on. |
 | `failFast`          | `boolean`                              | `true`                                       | Stop the whole run on the first failing story.                           |
 | `retries`           | `number`                               | `2`                                          | Retry count (applied on CI).                                             |
 | `workers`           | `number \| string`                     | Playwright default (½ cores)                 | Parallel workers; a count or a percentage string like `"100%"`.          |

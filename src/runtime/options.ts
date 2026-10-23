@@ -26,6 +26,8 @@ export interface RuntimeOptions {
   threshold: number | null
   /** How long a play function may run (ms) before the story fails. */
   playTimeout: number
+  /** One page for each worker, with stories switched inside it. */
+  reusePage: boolean
   failFast: boolean
   retries: number
   workers: number | string | null
