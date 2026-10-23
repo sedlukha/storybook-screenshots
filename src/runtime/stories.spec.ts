@@ -30,6 +30,18 @@ const stories = Object.values(index.entries).filter(
     (only ? only.has(entry.id) : true)
 )
 
+/** The prefix of a story tag that limits the story to one viewport. */
+const VIEWPORT_TAG = "viewport:"
+
+// The viewports a story names in its tags, or undefined when it names none.
+// Tags sit in index.json, so this needs no page.
+function taggedViewports(story: StoryEntry): string[] | undefined {
+  const names = (story.tags ?? [])
+    .filter((tag) => tag.startsWith(VIEWPORT_TAG))
+    .map((tag) => tag.slice(VIEWPORT_TAG.length))
+  return names.length > 0 ? names : undefined
+}
+
 function globalsParam(theme: ScreenshotTheme | null): string {
   if (!theme) {
     return ""
@@ -280,6 +292,12 @@ test.describe("storybook stories", () => {
         snapshotSuffix: string
         viewportName: string
       }
+      // Skip before the page loads. A load is most of the cost of a capture.
+      const tagged = taggedViewports(story)
+      test.skip(
+        tagged !== undefined && !tagged.includes(meta.viewportName),
+        `story tagged for viewports: ${tagged?.join(", ")}`
+      )
       const theme = meta.theme ?? null
       const captured: Captured = { errors: [] }
       page.on("console", (message) => {
