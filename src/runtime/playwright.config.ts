@@ -13,6 +13,17 @@ const DEVICE_BY_BROWSER: Record<ScreenshotBrowser, string> = {
 
 const runtimeDir = fileURLToPath(new URL(".", import.meta.url))
 
+/**
+ * Chromium draws the same story a little differently under load. These two
+ * flags remove that noise, see "Stable pixels" in the README.
+ */
+const STABLE_CHROMIUM_ARGS = [
+  // A late image redraws only part of a tile, and its edges blend another way.
+  "--disable-partial-raster",
+  // The GPU and the software path scale a canvas a little differently.
+  "--disable-gpu",
+]
+
 // One Playwright project per browser × viewport × theme. Each project carries
 // the snapshot folder + filename suffix for its baselines (see below).
 const themeList: (ScreenshotTheme | null)[] =
@@ -49,6 +60,9 @@ const projects = options.browsers.flatMap((browser) =>
         name: nameSegments.join("-"),
         use: {
           ...device,
+          ...(browser === "chromium"
+            ? { launchOptions: { args: STABLE_CHROMIUM_ARGS } }
+            : {}),
           viewport: { width: viewport.width, height: viewport.height },
           // Per-viewport device emulation. Only spread keys the config set, so
           // the browser device profile's defaults stay intact otherwise.
