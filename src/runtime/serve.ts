@@ -34,7 +34,14 @@ export function startStaticServer(
   port: number
 ): Promise<StaticServer> {
   const server = createServer((req, res) => {
-    const rawPath = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/")
+    let rawPath: string
+    try {
+      rawPath = decodeURIComponent((req.url ?? "/").split("?")[0] ?? "/")
+    } catch {
+      res.statusCode = 400
+      res.end("Bad request")
+      return
+    }
     const relative = rawPath === "/" ? "index.html" : rawPath.replace(/^\/+/, "")
     // Resolve inside rootDir and reject path traversal.
     const filePath = normalize(join(rootDir, relative))
