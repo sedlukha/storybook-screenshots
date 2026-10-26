@@ -327,6 +327,33 @@ export default defineConfig({
 })
 ```
 
+## Stable pixels
+
+With `threshold: 0`, any noise in a capture writes a new baseline. Chromium
+makes such noise when the machine is busy. A story that is stable alone can
+draw a little differently next to other stories, so a pull request carries
+baselines that nothing changed.
+
+The tool starts Chromium with two flags against this noise:
+
+| Flag                        | The noise it removes                                                                                  |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `--disable-partial-raster`  | An image that loads late redraws only part of a tile. Rounded corners at the edge of that part blend another way. |
+| `--disable-gpu`             | The GPU and the software path scale a canvas a little differently, and the choice changes between runs. |
+
+Measured on one app: the same 190 stories, two workers, five runs in a row.
+
+| Flags             | Baselines that changed in each run |
+| ----------------- | ---------------------------------- |
+| none              | 13–16                              |
+| both              | 1–4                                |
+
+Most of the rest came from one story, not from the browser. It drew a large
+JPEG straight from an `<img>` element. Chromium can decode such an image at
+full size or at a smaller one, and the choice depends on its cache. Draw from
+`createImageBitmap(...)` instead: it always decodes the whole picture. After
+that change the story stayed the same in five runs of five.
+
 ## Smoke check (no pixels)
 
 ```sh
